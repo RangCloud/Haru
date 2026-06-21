@@ -1,0 +1,29 @@
+diff --git a/node_modules/@react-native-seoul/naver-login/android/build.gradle b/node_modules/@react-native-seoul/naver-login/android/build.gradle
+index 2bbc6fd..d8b64a8 100644
+--- a/node_modules/@react-native-seoul/naver-login/android/build.gradle
++++ b/node_modules/@react-native-seoul/naver-login/android/build.gradle
+@@ -1,19 +1,9 @@
+-buildscript {
+-  def kotlin_version = rootProject.ext.has("kotlinVersion") ? rootProject.ext.get("kotlinVersion") : project.properties["RNNaverLogins_kotlinVersion"]
++// buildscript 블록 제거 — AGP·Kotlin 은 Expo/RN 루트 프로젝트가 이미 적용함.
++// 라이브러리 모듈에서 중복으로 classpath 선언 시 AGP 버전 충돌(7.2.1 vs 8.x) 발생.
+ 
+-  ext.getExtOrDefault = {name ->
+-    return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties['RNNaverLogins_' + name]
+-  }
+-
+-  repositories {
+-    mavenCentral()
+-    google()
+-  }
+-
+-  dependencies {
+-    classpath "com.android.tools.build:gradle:${getExtOrDefault('gradleVersion')}"
+-    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+-  }
++// rootProject.ext 에 값이 있으면 우선 사용, 없으면 gradle.properties 의 RNNaverLogins_* 값 사용
++ext.getExtOrDefault = {name ->
++  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties['RNNaverLogins_' + name]
+ }
+ 
+ def isNewArchitectureEnabled() {

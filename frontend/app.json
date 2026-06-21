@@ -50,6 +50,17 @@
         }
       ],
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24,
+            "kotlinVersion": "1.9.24"
+          }
+        }
+      ],
+      [
         "@react-native-kakao/core",
         {
           "nativeAppKey": "c9f4aada3426db38e2baaae8e3287af0",
