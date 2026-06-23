@@ -58,7 +58,7 @@
             "minSdkVersion": 24,
             "kotlinVersion": "2.1.21",
             "extraMavenRepos": [
-              "https://devrepo.kakao.com/nexus/repository/kakaobank-public/"
+              "https://devrepo.kakao.com/nexus/repository/public/"
             ]
           }
         }
