@@ -2,7 +2,14 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native
 import { router, Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import { LogBox, Platform } from "react-native";
 import "react-native-reanimated";
+
+// 웹 환경에서는 LogBox(네이티브 디버그 오버레이)가 초기화에 실패해 앱 전체가 crash됨
+// Platform.OS === 'web' 일 때만 비활성화
+if (Platform.OS === "web") {
+  LogBox.ignoreAllLogs();
+}
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/src/store/authStore";
