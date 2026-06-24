@@ -5,8 +5,9 @@
 라우터(api/weather.py)는 이 서비스만 호출하고
 HTTP 세부 사항을 알 필요가 없도록 분리한다.
 
-사용 API: 기상청 공공데이터포털 단기예보조회서비스 v2.0
-URL: https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst
+사용 API: 기상청 API 허브 단기예보조회서비스 v2.0
+URL: https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVilageFcst
+인증: authKey 쿼리 파라미터 (기상청 API 허브에서 발급)
 """
 
 import time
@@ -21,7 +22,7 @@ from app.schemas.weather import HourlyWeather, WeatherResponse
 # ──────────────────────────────────────────────────────────────
 # 기상청 단기예보 API 엔드포인트
 # ──────────────────────────────────────────────────────────────
-KMA_BASE_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+KMA_BASE_URL = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVilageFcst"
 
 # ──────────────────────────────────────────────────────────────
 # 메모리 캐시 — { cache_key: (저장_시각, WeatherResponse) }
@@ -68,7 +69,7 @@ def _get_base_time(now: datetime) -> tuple[str, str]:
     return base_date, base_time
 
 
-def _parse_items(items: list[dict], base_date: str, base_time: str) -> list[HourlyWeather]:
+def _parse_items(items: list[dict]) -> list[HourlyWeather]:
     """
     기상청 API 아이템 리스트 → 시간대별 HourlyWeather 리스트 변환
 
@@ -131,7 +132,7 @@ async def get_weather(lat: float, lon: float) -> WeatherResponse:
 
     # 기상청 API 호출
     params = {
-        "serviceKey": settings.weather_api_key,
+        "authKey": settings.weather_api_key,  # 기상청 API 허브는 authKey 사용 (공공데이터포털의 serviceKey와 다름)
         "numOfRows": 300,   # 시간대별 × 카테고리 수 고려해 여유 있게 설정
         "pageNo": 1,
         "base_date": base_date,
@@ -152,7 +153,7 @@ async def get_weather(lat: float, lon: float) -> WeatherResponse:
         raise ValueError(f"기상청 API 오류: {header['resultCode']} - {header['resultMsg']}")
 
     items: list[dict] = data["response"]["body"]["items"]["item"]
-    hourly = _parse_items(items, base_date, base_time)
+    hourly = _parse_items(items)
 
     if not hourly:
         raise ValueError("기상청 API에서 예보 데이터를 받지 못했습니다.")
