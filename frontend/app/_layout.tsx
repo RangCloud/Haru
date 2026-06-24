@@ -1,3 +1,4 @@
+import { initializeKakaoSDK } from "@react-native-kakao/core";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { router, Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -6,9 +7,16 @@ import { LogBox, Platform } from "react-native";
 import "react-native-reanimated";
 
 // 웹 환경에서는 LogBox(네이티브 디버그 오버레이)가 초기화에 실패해 앱 전체가 crash됨
-// Platform.OS === 'web' 일 때만 비활성화
 if (Platform.OS === "web") {
   LogBox.ignoreAllLogs();
+}
+
+// 카카오 SDK는 앱 시작 직후 반드시 초기화해야 함.
+// 초기화 없이 login() 호출 시 "lateinit property hosts has not been initialized" crash 발생.
+if (Platform.OS !== "web") {
+  initializeKakaoSDK(
+    process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? "c9f4aada3426db38e2baaae8e3287af0",
+  );
 }
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
