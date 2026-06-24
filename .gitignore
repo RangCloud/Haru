@@ -29,6 +29,8 @@ frontend/ios/
 # ── IDE / 에디터 설정 ─────────────────────────────────────────
 # Claude Code 프로젝트 설정 — 개인 IDE 설정이므로 저장소 제외
 **/.claude/
+# Android Studio 프로젝트 설정 — 개인 IDE 설정이므로 저장소 제외
+**/.idea/
 # VSCode workspace 설정은 팀 공유 목적이면 커밋 가능, 개인 설정이면 제외
 # .vscode/
 
