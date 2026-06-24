@@ -47,14 +47,22 @@ export default function LoginScreen() {
 
   // Google 응답 처리 — response가 success로 바뀌면 유저 정보 조회
   useEffect(() => {
-    if (response?.type !== "success") return;
+    if (!response) return;
+
+    // 취소·닫기·오류 시 loading 초기화 — 이걸 빠뜨리면 버튼이 영구 비활성화됨
+    if (response.type !== "success") {
+      setLoading(null);
+      return;
+    }
 
     const accessToken = response.authentication?.accessToken;
-    if (!accessToken) return;
+    if (!accessToken) {
+      setLoading(null);
+      return;
+    }
 
     (async () => {
       try {
-        setLoading("google");
         const res = await fetch("https://www.googleapis.com/userinfo/v2/me", {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
