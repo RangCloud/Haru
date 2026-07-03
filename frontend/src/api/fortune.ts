@@ -7,7 +7,9 @@
  * - 하루 1회 캐시, 레이트 리밋은 백엔드에서 제어
  */
 
-const API_BASE = __DEV__ ? "http://localhost:8000" : "https://api.haru-app.com";
+// Render 배포 URL — 개발/프로덕션 모두 동일하게 사용
+// (에뮬레이터에서 localhost:8000은 호스트 PC를 가리키지 않으므로 Render URL 통일)
+const API_BASE = "https://haru-bnsg.onrender.com";
 
 // ── 응답 타입 ────────────────────────────────────────────────
 

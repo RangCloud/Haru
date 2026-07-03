@@ -7,9 +7,8 @@
  * - 격자 좌표 변환, 응답 파싱, 캐싱은 백엔드에서 처리
  */
 
-// ── 개발 환경에서는 로컬 백엔드를 바라본다 ───────────────────
-// 실제 기기에서 테스트할 때는 PC의 LAN IP로 교체 필요 (예: http://192.168.0.x:8000)
-const API_BASE = __DEV__ ? "http://localhost:8000" : "https://api.haru-app.com";
+// Render 배포 URL — 개발/프로덕션 모두 동일하게 사용
+const API_BASE = "https://haru-bnsg.onrender.com";
 
 // ── 응답 타입 ────────────────────────────────────────────────
 

@@ -7,8 +7,8 @@
  * - HTML 태그 제거, 저작권 준수(본문 제외) 처리는 백엔드에서 담당
  */
 
-// 개발 환경에서는 로컬 백엔드, 프로덕션에서는 실제 도메인으로 교체
-const API_BASE = __DEV__ ? "http://localhost:8000" : "https://api.haru-app.com";
+// Render 배포 URL — 개발/프로덕션 모두 동일하게 사용
+const API_BASE = "https://haru-bnsg.onrender.com";
 
 // ── 응답 타입 ────────────────────────────────────────────────
 
