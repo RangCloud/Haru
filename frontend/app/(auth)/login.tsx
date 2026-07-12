@@ -91,7 +91,9 @@ export default function LoginScreen() {
       await signIn(user);
       router.replace("/(tabs)");
     } catch (e) {
-      Alert.alert("오류", "카카오 로그인에 실패했습니다.");
+      // 실제 오류 내용을 보여줘야 디버깅 가능 — 출시 전 제거 예정
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert("카카오 로그인 오류", msg);
     } finally {
       setLoading(null);
     }
