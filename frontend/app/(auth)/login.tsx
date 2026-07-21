@@ -38,11 +38,14 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState<"google" | "kakao" | "naver" | null>(null);
 
   // ── Google OAuth 설정 ──────────────────────────────────────
-  // clientId 값은 frontend/.env.local의 EXPO_PUBLIC_GOOGLE_* 에서 읽는다.
+  // Android에서 androidClientId를 사용하면 redirect_uri가 패키지명 기반
+  // (com.haru.app:/...)으로 생성되는데, 앱 scheme("haru")과 달라서 Error 400 발생.
+  // webClientId만 사용하면 scheme 기반 redirect_uri(haru://...)를 쓰므로 일관됨.
+  // 단, Google Cloud Console의 웹 클라이언트에 haru://oauth2redirect/google 등록 필요.
   const [request, response, promptGoogleAsync] = Google.useAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    // androidClientId를 제거 — webClientId로 통일
   });
 
   // Google 응답 처리 — response가 success로 바뀌면 유저 정보 조회
@@ -119,16 +122,18 @@ export default function LoginScreen() {
       <View style={styles.header}>
         <Text style={styles.logo}>🌸</Text>
         <Text style={[styles.appName, { color: colors.text }]}>하루</Text>
-        <Text style={[styles.tagline, { color: colors.icon }]}>
+        <Text style={[styles.tagline, { color: colors.subtext }]}>
           오늘 하루를 한눈에 정리하세요
         </Text>
       </View>
 
       {/* 로그인 버튼 영역 */}
-      <View style={styles.buttons}>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[styles.cardLabel, { color: colors.subtext }]}>소셜 계정으로 시작하기</Text>
+
         {/* Google */}
         <TouchableOpacity
-          style={[styles.btn, styles.btnGoogle, { borderColor: colors.icon + "40" }]}
+          style={[styles.btn, styles.btnGoogle, { borderColor: colors.separator }]}
           onPress={() => {
             setLoading("google");
             promptGoogleAsync();
@@ -137,7 +142,7 @@ export default function LoginScreen() {
           activeOpacity={0.8}
         >
           {loading === "google" ? (
-            <ActivityIndicator color="#444" />
+            <ActivityIndicator color="#4285F4" size="small" />
           ) : (
             <>
               <Text style={styles.btnIconGoogle}>G</Text>
@@ -154,7 +159,7 @@ export default function LoginScreen() {
           activeOpacity={0.8}
         >
           {loading === "kakao" ? (
-            <ActivityIndicator color="#3c1e1e" />
+            <ActivityIndicator color="#3c1e1e" size="small" />
           ) : (
             <>
               <Text style={styles.btnIconKakao}>K</Text>
@@ -171,7 +176,7 @@ export default function LoginScreen() {
           activeOpacity={0.8}
         >
           {loading === "naver" ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
               <Text style={styles.btnIconNaver}>N</Text>
@@ -181,8 +186,8 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={[styles.notice, { color: colors.icon }]}>
-        로그인 시 이용약관 및 개인정보처리방침에 동의하게 됩니다.
+      <Text style={[styles.notice, { color: colors.subtext }]}>
+        로그인 시 이용약관 및 개인정보처리방침에{"\n"}동의하게 됩니다.
       </Text>
     </View>
   );
@@ -193,64 +198,83 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 32,
-    gap: 40,
+    paddingHorizontal: 28,
+    gap: 32,
   },
   header: {
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   logo: {
-    fontSize: 64,
-    marginBottom: 4,
+    fontSize: 80,
+    marginBottom: 2,
   },
   appName: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: "700",
-    letterSpacing: -0.5,
+    letterSpacing: -1,
   },
   tagline: {
     fontSize: 15,
+    letterSpacing: 0.2,
   },
-  buttons: {
+  // 버튼을 감싸는 카드
+  card: {
     width: "100%",
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
     gap: 12,
+  },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    textAlign: "center",
+    marginBottom: 2,
   },
   btn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 15,
-    borderRadius: 12,
+    borderRadius: 14,
     gap: 10,
   },
-  // Google — 흰 배경 + 테두리
+  // Google — 흰 배경 + 구분선
   btnGoogle: {
     backgroundColor: "#fff",
     borderWidth: 1,
   },
   btnIconGoogle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     color: "#4285F4",
+    width: 20,
+    textAlign: "center",
   },
-  // 카카오 — 공식 노란색
+  // 카카오 — 공식 노란색 (#FEE500)
   btnKakao: {
     backgroundColor: "#FEE500",
   },
   btnIconKakao: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     color: "#3c1e1e",
+    width: 20,
+    textAlign: "center",
   },
-  // 네이버 — 공식 초록색
+  // 네이버 — 공식 초록색 (#03C75A)
   btnNaver: {
     backgroundColor: "#03C75A",
   },
   btnIconNaver: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     color: "#fff",
+    width: 20,
+    textAlign: "center",
   },
   btnText: {
     fontSize: 16,
@@ -259,6 +283,6 @@ const styles = StyleSheet.create({
   notice: {
     fontSize: 11,
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 18,
   },
 });

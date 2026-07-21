@@ -14,10 +14,20 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
 const MAPPING = {
-  'house.fill': 'home',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
-  'chevron.right': 'chevron-right',
+  // 기본
+  "house.fill": "home",
+  "paperplane.fill": "send",
+  "chevron.left.forwardslash.chevron.right": "code",
+  "chevron.right": "chevron-right",
+  // 탭 아이콘
+  "cloud.sun.fill": "wb-cloudy",
+  "wonsign.circle.fill": "account-balance-wallet",
+  "calendar": "event",
+  "ellipsis.circle.fill": "more-horiz",
+  // 테마 토글
+  "moon.fill": "bedtime",
+  "sun.max.fill": "wb-sunny",
+  "gearshape.fill": "settings",
 } as IconMapping;
 
 /**

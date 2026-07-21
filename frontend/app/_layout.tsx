@@ -21,6 +21,7 @@ if (Platform.OS !== "web") {
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/src/store/authStore";
+import { useThemeStore } from "@/src/store/themeStore";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -29,11 +30,13 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { user, isLoaded, loadSession } = useAuthStore();
+  const { loadMode } = useThemeStore();
   const segments = useSegments();
 
-  // 앱 최초 실행 시 SecureStore에서 저장된 세션 복원
+  // 앱 최초 실행 시 세션 + 테마 설정 복원
   useEffect(() => {
     loadSession();
+    loadMode();
   }, []);
 
   // 세션 로드 완료 후 로그인 여부에 따라 라우트 전환

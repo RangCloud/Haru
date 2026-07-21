@@ -1,42 +1,25 @@
 /**
- * 홈 화면 — DAY 5 통합 완성
- *
- * 구성:
- * 1. 헤더: 로그인 유저 이름 + 오늘 날짜
- * 2. 이달 가계부 요약 카드 (수입 / 지출 / 잔액)
- * 3. 오늘 일정 카드 (최대 3개, 더보기 버튼)
- * 4. 로그아웃 버튼
- *
- * 날씨는 별도 탭에서 확인 가능하므로 홈에서는 제외.
+ * 홈 화면
+ * 이달 가계부 요약 + 오늘 일정 카드 + 테마 토글
  */
 
 import { router } from "expo-router";
 import { useEffect } from "react";
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { Colors } from "@/constants/theme";
+import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
+import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
 function formatToday(): string {
   const now = new Date();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  const dow = days[now.getDay()];
-  return `${y}년 ${m}월 ${d}일 (${dow})`;
+  return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
 }
 
 function todayString(): string {
@@ -48,38 +31,42 @@ function formatAmount(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
 }
 
+// 테마 모드별 이모지 아이콘
+const THEME_ICON: Record<ThemeMode, string> = { system: "⚙️", light: "☀️", dark: "🌙" };
+const NEXT_MODE: Record<ThemeMode, ThemeMode> = { system: "light", light: "dark", dark: "system" };
+
 // ── 가계부 요약 카드 ──────────────────────────────────────────
 
-interface BudgetCardProps {
-  income: number;
-  expense: number;
-  balance: number;
-  colors: (typeof Colors)["light"];
-}
-
-function BudgetSummaryCard({ income, expense, balance, colors }: BudgetCardProps) {
+function BudgetSummaryCard({
+  income, expense, balance, colors,
+}: {
+  income: number; expense: number; balance: number;
+  colors: typeof Colors.light;
+}) {
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.tint + "18" }]}
+      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}
       onPress={() => router.push("/(tabs)/budget")}
-      activeOpacity={0.8}
+      activeOpacity={0.75}
     >
       <View style={styles.cardHeader}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>💰 이달 가계부</Text>
+        <Text style={[styles.cardLabel, { color: colors.subtext }]}>이달 가계부</Text>
         <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
       </View>
       <View style={styles.budgetRow}>
         <View style={styles.budgetItem}>
-          <Text style={[styles.budgetLabel, { color: colors.icon }]}>수입</Text>
-          <Text style={[styles.budgetIncome]}>{formatAmount(income)}</Text>
+          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>수입</Text>
+          <Text style={[styles.budgetValue, { color: colors.income }]}>{formatAmount(income)}</Text>
         </View>
+        <View style={[styles.budgetDivider, { backgroundColor: colors.separator }]} />
         <View style={styles.budgetItem}>
-          <Text style={[styles.budgetLabel, { color: colors.icon }]}>지출</Text>
-          <Text style={[styles.budgetExpense]}>{formatAmount(expense)}</Text>
+          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>지출</Text>
+          <Text style={[styles.budgetValue, { color: colors.expense }]}>{formatAmount(expense)}</Text>
         </View>
+        <View style={[styles.budgetDivider, { backgroundColor: colors.separator }]} />
         <View style={styles.budgetItem}>
-          <Text style={[styles.budgetLabel, { color: colors.icon }]}>잔액</Text>
-          <Text style={[styles.budgetBalance, { color: balance >= 0 ? colors.tint : "#e74c3c" }]}>
+          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>잔액</Text>
+          <Text style={[styles.budgetValue, { color: balance >= 0 ? colors.tint : colors.expense }]}>
             {formatAmount(balance)}
           </Text>
         </View>
@@ -90,27 +77,26 @@ function BudgetSummaryCard({ income, expense, balance, colors }: BudgetCardProps
 
 // ── 오늘 일정 카드 ────────────────────────────────────────────
 
-interface TodayScheduleCardProps {
+function TodayScheduleCard({
+  schedules, colors,
+}: {
   schedules: { id: number; title: string; time: string }[];
-  colors: (typeof Colors)["light"];
-}
-
-function TodayScheduleCard({ schedules, colors }: TodayScheduleCardProps) {
+  colors: typeof Colors.light;
+}) {
   const preview = schedules.slice(0, 3);
-  const rest = schedules.length - preview.length;
 
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.tint + "18" }]}
+      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}
       onPress={() => router.push("/(tabs)/schedule")}
-      activeOpacity={0.8}
+      activeOpacity={0.75}
     >
       <View style={styles.cardHeader}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>📅 오늘 일정</Text>
+        <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 일정</Text>
         <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
       </View>
       {preview.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.icon }]}>오늘 일정이 없습니다.</Text>
+        <Text style={[styles.emptyText, { color: colors.subtext }]}>오늘 일정이 없습니다.</Text>
       ) : (
         <>
           {preview.map((s) => (
@@ -119,14 +105,14 @@ function TodayScheduleCard({ schedules, colors }: TodayScheduleCardProps) {
               <Text style={[styles.scheduleTitle, { color: colors.text }]} numberOfLines={1}>
                 {s.title}
               </Text>
-              <Text style={[styles.scheduleTime, { color: colors.icon }]}>
+              <Text style={[styles.scheduleTime, { color: colors.subtext }]}>
                 {s.time || "종일"}
               </Text>
             </View>
           ))}
-          {rest > 0 && (
+          {schedules.length > 3 && (
             <Text style={[styles.moreText, { color: colors.tint }]}>
-              +{rest}개 더 보기
+              +{schedules.length - 3}개 더 보기
             </Text>
           )}
         </>
@@ -138,37 +124,27 @@ function TodayScheduleCard({ schedules, colors }: TodayScheduleCardProps) {
 // ── 메인 화면 ─────────────────────────────────────────────────
 
 export default function HomeScreen() {
-  const scheme = useColorScheme() ?? "light";
+  const scheme = useColorScheme();
   const colors = Colors[scheme];
 
   const { user, signOut } = useAuthStore();
   const { totalIncome, totalExpense, balance, loadMonth } = useBudgetStore();
   const { monthSchedules, loadMonth: loadScheduleMonth } = useScheduleStore();
+  const { mode, setMode } = useThemeStore();
 
-  // 이달 가계부·일정 로드
   useEffect(() => {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth() + 1;
-    loadMonth(y, m);
-    loadScheduleMonth(y, m);
+    loadMonth(now.getFullYear(), now.getMonth() + 1);
+    loadScheduleMonth(now.getFullYear(), now.getMonth() + 1);
   }, []);
 
-  // 오늘 일정만 필터링
   const today = todayString();
   const todaySchedules = monthSchedules.filter((s) => s.date === today);
 
   const handleSignOut = () => {
     Alert.alert("로그아웃", "로그아웃할까요?", [
       { text: "취소", style: "cancel" },
-      {
-        text: "로그아웃",
-        style: "destructive",
-        onPress: async () => {
-          await signOut();
-          router.replace("/(auth)/login");
-        },
-      },
+      { text: "로그아웃", style: "destructive", onPress: async () => { await signOut(); router.replace("/(auth)/login"); } },
     ]);
   };
 
@@ -179,26 +155,31 @@ export default function HomeScreen() {
     >
       {/* 헤더 */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={[styles.greeting, { color: colors.text }]}>
             안녕하세요, {user?.name ?? ""}님 👋
           </Text>
-          <Text style={[styles.date, { color: colors.icon }]}>{formatToday()}</Text>
+          <Text style={[styles.date, { color: colors.subtext }]}>{formatToday()}</Text>
         </View>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutBtn}>
-          <Text style={[styles.signOutText, { color: colors.icon }]}>로그아웃</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {/* 테마 토글 — 탭할 때마다 system → light → dark → system 순환 */}
+          <TouchableOpacity
+            onPress={() => setMode(NEXT_MODE[mode])}
+            style={styles.iconBtn}
+          >
+            <Text style={styles.themeIcon}>{THEME_ICON[mode]}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSignOut} style={styles.iconBtn}>
+            <Text style={[styles.signOutText, { color: colors.subtext }]}>로그아웃</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* 이달 가계부 요약 */}
-      <BudgetSummaryCard
-        income={totalIncome}
-        expense={totalExpense}
-        balance={balance}
-        colors={colors}
-      />
+      {/* 섹션 레이블 */}
+      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>이번 달</Text>
+      <BudgetSummaryCard income={totalIncome} expense={totalExpense} balance={balance} colors={colors} />
 
-      {/* 오늘 일정 */}
+      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘</Text>
       <TodayScheduleCard schedules={todaySchedules} colors={colors} />
     </ScrollView>
   );
@@ -206,44 +187,54 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 24, paddingTop: 64, gap: 16 },
+  content: { padding: 24, paddingTop: 64, gap: 8 },
+  // ── 헤더 ──────────────────────────────────────────────────
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: 20,
   },
-  greeting: { fontSize: 24, fontWeight: "700" },
-  date: { fontSize: 13, marginTop: 4 },
-  signOutBtn: { paddingTop: 4 },
+  headerLeft: { gap: 4 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 2 },
+  greeting: { fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  date: { fontSize: 13 },
+  iconBtn: { padding: 4 },
+  themeIcon: { fontSize: 20 },
   signOutText: { fontSize: 13 },
+  // ── 섹션 레이블 ───────────────────────────────────────────
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginTop: 8,
+    marginBottom: 6,
+  },
   // ── 카드 공통 ─────────────────────────────────────────────
   card: {
     borderRadius: 16,
-    padding: 18,
-    gap: 12,
+    borderWidth: 1,
+    padding: 20,
+    gap: 14,
+    marginBottom: 4,
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  cardTitle: { fontSize: 16, fontWeight: "600" },
+  cardLabel: { fontSize: 13, fontWeight: "600", letterSpacing: 0.2 },
   cardLink: { fontSize: 13 },
   // ── 가계부 ────────────────────────────────────────────────
-  budgetRow: { flexDirection: "row", justifyContent: "space-around" },
-  budgetItem: { alignItems: "center", gap: 4 },
-  budgetLabel: { fontSize: 12 },
-  budgetIncome: { fontSize: 15, fontWeight: "600", color: "#27ae60" },
-  budgetExpense: { fontSize: 15, fontWeight: "600", color: "#e74c3c" },
-  budgetBalance: { fontSize: 15, fontWeight: "700" },
+  budgetRow: { flexDirection: "row", alignItems: "center" },
+  budgetItem: { flex: 1, alignItems: "center", gap: 5 },
+  budgetDivider: { width: 1, height: 32 },
+  budgetCaption: { fontSize: 11 },
+  budgetValue: { fontSize: 14, fontWeight: "700" },
   // ── 일정 ──────────────────────────────────────────────────
-  scheduleItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  scheduleDot: { width: 6, height: 6, borderRadius: 3 },
+  scheduleItem: { flexDirection: "row", alignItems: "center", gap: 10 },
+  scheduleDot: { width: 7, height: 7, borderRadius: 4 },
   scheduleTitle: { flex: 1, fontSize: 14 },
   scheduleTime: { fontSize: 12 },
   moreText: { fontSize: 13, fontWeight: "500" },
