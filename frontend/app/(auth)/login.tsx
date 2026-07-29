@@ -12,6 +12,7 @@
  */
 
 import * as Google from "expo-auth-session/providers/google";
+import { makeRedirectUri } from "expo-auth-session";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
@@ -38,14 +39,19 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState<"google" | "kakao" | "naver" | null>(null);
 
   // ── Google OAuth 설정 ──────────────────────────────────────
-  // Android에서 androidClientId를 사용하면 redirect_uri가 패키지명 기반
-  // (com.haru.app:/...)으로 생성되는데, 앱 scheme("haru")과 달라서 Error 400 발생.
-  // webClientId만 사용하면 scheme 기반 redirect_uri(haru://...)를 쓰므로 일관됨.
-  // 단, Google Cloud Console의 웹 클라이언트에 haru://oauth2redirect/google 등록 필요.
+  // app.json scheme이 "haru"이므로 expo-auth-session이 자동 생성하는 redirect URI는
+  // "haru:/oauth2redirect/google"이지만, GCP Android 클라이언트는 패키지명 기반인
+  // "com.haru.app:/oauth2redirect/google"을 기대 → 스킴 불일치로 Error 400 발생.
+  // makeRedirectUri({ native: ... })로 명시해 패키지명 스킴을 강제 사용.
+  const redirectUri = makeRedirectUri({
+    native: "com.haru.app:/oauth2redirect/google",
+  });
+
   const [request, response, promptGoogleAsync] = Google.useAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    // androidClientId를 제거 — webClientId로 통일
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    redirectUri,
   });
 
   // Google 응답 처리 — response가 success로 바뀌면 유저 정보 조회
