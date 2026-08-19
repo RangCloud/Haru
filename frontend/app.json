@@ -56,18 +56,8 @@
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "minSdkVersion": 24,
-            "kotlinVersion": "2.1.21",
-            "extraMavenRepos": [
-              "https://devrepo.kakao.com/nexus/repository/public/"
-            ]
+            "kotlinVersion": "2.1.21"
           }
-        }
-      ],
-      [
-        "@react-native-kakao/core",
-        {
-          "nativeAppKey": "c9f4aada3426db38e2baaae8e3287af0",
-          "kotlinVersion": "2.1.21"
         }
       ]
     ],

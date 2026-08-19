@@ -1,14 +1,8 @@
 /**
- * 로그인 화면
+ * 로그인 화면 — Google 소셜 로그인만 지원
  *
- * 첫 실행 또는 로그아웃 후에만 표시된다.
- * 세 가지 소셜 로그인을 지원한다:
- * - Google: expo-auth-session (브라우저 OAuth)
- * - 카카오: @react-native-kakao/user (네이티브 SDK)
- * - 네이버: @react-native-seoul/naver-login (네이티브 SDK)
- *
- * 주의: 카카오·네이버는 Expo Go에서 동작하지 않는다.
- *        개발 빌드(npx expo run:android / run:ios) 또는 EAS Build 필요.
+ * expo-auth-session 브라우저 OAuth 방식을 사용한다.
+ * redirect URI는 GCP Android 클라이언트가 기대하는 패키지명 기반 스킴으로 고정.
  */
 
 import * as Google from "expo-auth-session/providers/google";
@@ -26,7 +20,6 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/theme";
-import { signInWithKakao, signInWithNaver } from "@/src/api/auth";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/src/store/authStore";
 
@@ -36,13 +29,11 @@ WebBrowser.maybeCompleteAuthSession();
 export default function LoginScreen() {
   const colors = Colors[useColorScheme() ?? "light"];
   const { signIn } = useAuthStore();
-  const [loading, setLoading] = useState<"google" | "kakao" | "naver" | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // ── Google OAuth 설정 ──────────────────────────────────────
-  // app.json scheme이 "haru"이므로 expo-auth-session이 자동 생성하는 redirect URI는
-  // "haru:/oauth2redirect/google"이지만, GCP Android 클라이언트는 패키지명 기반인
-  // "com.haru.app:/oauth2redirect/google"을 기대 → 스킴 불일치로 Error 400 발생.
-  // makeRedirectUri({ native: ... })로 명시해 패키지명 스킴을 강제 사용.
+  // app.json scheme("haru")과 GCP Android 클라이언트가 기대하는 패키지명 기반
+  // redirect URI("com.haru.app:/oauth2redirect/google") 불일치가 Error 400 원인.
+  // makeRedirectUri({ native: ... })로 패키지명 스킴을 명시해 강제 사용.
   const redirectUri = makeRedirectUri({
     native: "com.haru.app:/oauth2redirect/google",
   });
@@ -58,15 +49,15 @@ export default function LoginScreen() {
   useEffect(() => {
     if (!response) return;
 
-    // 취소·닫기·오류 시 loading 초기화 — 이걸 빠뜨리면 버튼이 영구 비활성화됨
+    // 취소·닫기·오류 시 loading 초기화
     if (response.type !== "success") {
-      setLoading(null);
+      setLoading(false);
       return;
     }
 
     const accessToken = response.authentication?.accessToken;
     if (!accessToken) {
-      setLoading(null);
+      setLoading(false);
       return;
     }
 
@@ -84,43 +75,13 @@ export default function LoginScreen() {
           provider: "google",
         });
         router.replace("/(tabs)");
-      } catch (e) {
+      } catch {
         Alert.alert("오류", "Google 로그인에 실패했습니다.");
       } finally {
-        setLoading(null);
+        setLoading(false);
       }
     })();
   }, [response]);
-
-  // ── 카카오 로그인 ──────────────────────────────────────────
-  const handleKakao = async () => {
-    setLoading("kakao");
-    try {
-      const user = await signInWithKakao();
-      await signIn(user);
-      router.replace("/(tabs)");
-    } catch (e) {
-      // 실제 오류 내용을 보여줘야 디버깅 가능 — 출시 전 제거 예정
-      const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert("카카오 로그인 오류", msg);
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  // ── 네이버 로그인 ──────────────────────────────────────────
-  const handleNaver = async () => {
-    setLoading("naver");
-    try {
-      const user = await signInWithNaver();
-      await signIn(user);
-      router.replace("/(tabs)");
-    } catch (e) {
-      Alert.alert("오류", "네이버 로그인에 실패했습니다.");
-    } finally {
-      setLoading(null);
-    }
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -137,56 +98,21 @@ export default function LoginScreen() {
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[styles.cardLabel, { color: colors.subtext }]}>소셜 계정으로 시작하기</Text>
 
-        {/* Google */}
         <TouchableOpacity
           style={[styles.btn, styles.btnGoogle, { borderColor: colors.separator }]}
           onPress={() => {
-            setLoading("google");
+            setLoading(true);
             promptGoogleAsync();
           }}
-          disabled={!request || loading !== null}
+          disabled={!request || loading}
           activeOpacity={0.8}
         >
-          {loading === "google" ? (
+          {loading ? (
             <ActivityIndicator color="#4285F4" size="small" />
           ) : (
             <>
               <Text style={styles.btnIconGoogle}>G</Text>
               <Text style={[styles.btnText, { color: "#3c4043" }]}>Google로 시작하기</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* 카카오 */}
-        <TouchableOpacity
-          style={[styles.btn, styles.btnKakao]}
-          onPress={handleKakao}
-          disabled={loading !== null}
-          activeOpacity={0.8}
-        >
-          {loading === "kakao" ? (
-            <ActivityIndicator color="#3c1e1e" size="small" />
-          ) : (
-            <>
-              <Text style={styles.btnIconKakao}>K</Text>
-              <Text style={[styles.btnText, { color: "#3c1e1e" }]}>카카오로 시작하기</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* 네이버 */}
-        <TouchableOpacity
-          style={[styles.btn, styles.btnNaver]}
-          onPress={handleNaver}
-          disabled={loading !== null}
-          activeOpacity={0.8}
-        >
-          {loading === "naver" ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Text style={styles.btnIconNaver}>N</Text>
-              <Text style={[styles.btnText, { color: "#fff" }]}>네이버로 시작하기</Text>
             </>
           )}
         </TouchableOpacity>
@@ -224,7 +150,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0.2,
   },
-  // 버튼을 감싸는 카드
   card: {
     width: "100%",
     borderRadius: 20,
@@ -248,7 +173,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 10,
   },
-  // Google — 흰 배경 + 구분선
   btnGoogle: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -257,28 +181,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: "#4285F4",
-    width: 20,
-    textAlign: "center",
-  },
-  // 카카오 — 공식 노란색 (#FEE500)
-  btnKakao: {
-    backgroundColor: "#FEE500",
-  },
-  btnIconKakao: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#3c1e1e",
-    width: 20,
-    textAlign: "center",
-  },
-  // 네이버 — 공식 초록색 (#03C75A)
-  btnNaver: {
-    backgroundColor: "#03C75A",
-  },
-  btnIconNaver: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#fff",
     width: 20,
     textAlign: "center",
   },
