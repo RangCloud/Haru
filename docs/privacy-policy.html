@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>하루 — 개인정보처리방침</title>
+  <style>
+    :root {
+      --bg: #f5f5ff;
+      --surface: #ffffff;
+      --primary: #6b6ee7;
+      --primary-dark: #4a4db8;
+      --text: #18182e;
+      --subtext: #4a4a72;
+      --border: #ddddf5;
+      --tag-bg: #edeeff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0e1a;
+        --surface: #18182e;
+        --primary: #8b8ef5;
+        --primary-dark: #6b6ee7;
+        --text: #edeeff;
+        --subtext: #9090c0;
+        --border: #2a2a4a;
+        --tag-bg: #1e1e38;
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+                   "Noto Sans KR", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+      padding: 0 16px 60px;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4a4db8 0%, #6b6ee7 60%, #9b7fe8 100%);
+      margin: 0 -16px 40px;
+      padding: 48px 32px 40px;
+      color: #ffffff;
+      text-align: center;
+    }
+    .header .icon { font-size: 48px; margin-bottom: 12px; }
+    .header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .header p  { font-size: 13px; opacity: 0.85; }
+
+    .container { max-width: 720px; margin: 0 auto; }
+
+    .notice {
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--primary);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      font-size: 14px;
+      color: var(--subtext);
+    }
+    .notice strong { color: var(--text); }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 28px 24px;
+      margin-bottom: 20px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    h2 { font-size: 17px; font-weight: 700; color: var(--text); }
+
+    p  { font-size: 14px; color: var(--subtext); margin-bottom: 10px; }
+    p:last-child { margin-bottom: 0; }
+
+    ul, ol { padding-left: 20px; margin-bottom: 10px; }
+    li { font-size: 14px; color: var(--subtext); margin-bottom: 4px; }
+    li:last-child { margin-bottom: 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    th {
+      background: var(--tag-bg);
+      color: var(--primary-dark);
+      font-weight: 600;
+      padding: 10px 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      color: var(--subtext);
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: var(--bg); }
+
+    .tag {
+      display: inline-block;
+      background: var(--tag-bg);
+      color: var(--primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      margin: 2px 2px 2px 0;
+    }
+    .highlight {
+      background: var(--tag-bg);
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--subtext);
+      border-left: 3px solid var(--primary);
+    }
+
+    .contact-box {
+      background: var(--tag-bg);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-top: 12px;
+    }
+    .contact-box dt {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 2px;
+      margin-top: 10px;
+    }
+    .contact-box dt:first-child { margin-top: 0; }
+    .contact-box dd {
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--subtext);
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="icon">🌸</div>
+  <h1>하루 — 개인정보처리방침</h1>
+  <p>시행일: 2025년 8월 19일</p>
+</div>
+
+<div class="container">
+
+  <div class="notice">
+    <strong>하루(Haru)</strong>는 가계부·일정·날씨·뉴스·운세를 하나로 모은 데일리 라이프 앱입니다.
+    가계부·일정 데이터는 <strong>기기에만 저장</strong>되며 외부 서버로 전송되지 않습니다.
+    본 방침은 「개인정보 보호법」 제30조에 따라 작성되었습니다.
+  </div>
+
+  <!-- 1 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>수집하는 개인정보 항목 및 수집 방법</h2>
+    </div>
+    <p>서비스 이용 방식에 따라 아래와 같이 개인정보를 수집합니다.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>구분</th>
+          <th>수집 항목</th>
+          <th>수집 방법</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag">소셜 로그인</span></td>
+          <td>이름(닉네임), 이메일 주소, 프로필 사진 URL</td>
+          <td>Google / 카카오 / 네이버 OAuth 동의</td>
+        </tr>
+        <tr>
+          <td><span class="tag">날씨</span></td>
+          <td>현재 위치 (위도·경도)</td>
+          <td>기기 GPS (앱 사용 중에만, 서버 저장 없음)</td>
+        </tr>
+        <tr>
+          <td><span class="tag">가계부·일정</span></td>
+          <td>수입·지출 내역, 일정 제목·날짜</td>
+          <td>사용자 직접 입력 — <strong>기기 내부에만 저장</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="highlight">
+      ※ 위치 정보는 날씨 조회 목적으로만 사용하며, 서버에 저장하거나 제3자에게 제공하지 않습니다.<br>
+      ※ 가계부·일정 데이터는 외부로 전송되지 않으며, 앱 삭제 시 완전히 삭제됩니다.
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>개인정보의 수집 및 이용 목적</h2>
+    </div>
+    <ul>
+      <li><strong>소셜 로그인 정보</strong>: 회원 식별, 닉네임·프로필 사진 표시</li>
+      <li><strong>위치 정보</strong>: 현재 위치 기반 날씨·기상 예보 제공</li>
+      <li><strong>가계부·일정 데이터</strong>: 앱 내 개인 재무·일정 관리 기능 제공 (기기 내부에서만 처리)</li>
+    </ul>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>개인정보의 보유 및 이용 기간</h2>
+    </div>
+    <table>
+      <thead>
+        <tr><th>항목</th><th>보유 기간</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>소셜 로그인 정보 (이름, 이메일, 프로필 사진)</td>
+          <td>앱 내 로그인 세션 기간 동안 / 로그아웃 시 삭제</td>
+        </tr>
+        <tr>
+          <td>위치 정보</td>
+          <td>날씨 API 호출 즉시 사용 후 파기 (저장하지 않음)</td>
+        </tr>
+        <tr>
+          <td>가계부·일정 데이터</td>
+          <td>사용자가 직접 삭제하거나 앱을 삭제할 때까지 (기기 내부)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>개인정보의 제3자 제공</h2>
+    </div>
+    <p>하루는 원칙적으로 이용자의 개인정보를 제3자에게 제공하지 않습니다.</p>
+    <p>단, 아래의 경우에는 예외로 합니다.</p>
+    <ul>
+      <li>이용자의 사전 동의가 있는 경우</li>
+      <li>법률의 특별한 규정이 있거나 법령상 의무 준수를 위해 불가피한 경우</li>
+    </ul>
+  </section>
+
+  <!-- 5 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>개인정보처리 위탁</h2>
+    </div>
+    <p>하루는 서비스 운영을 위해 아래와 같이 개인정보 처리 업무를 위탁합니다.</p>
+    <table>
+      <thead>
+        <tr><th>수탁업체</th><th>위탁 업무</th><th>보유 기간</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Google LLC</td>
+          <td>Google OAuth 소셜 로그인 인증</td>
+          <td>로그인 세션 기간</td>
+        </tr>
+        <tr>
+          <td>카카오(Kakao Corp.)</td>
+          <td>카카오 소셜 로그인 인증</td>
+          <td>로그인 세션 기간</td>
+        </tr>
+        <tr>
+          <td>네이버(NAVER Corp.)</td>
+          <td>네이버 소셜 로그인 인증 및 뉴스 데이터 제공</td>
+          <td>로그인 세션 기간</td>
+        </tr>
+        <tr>
+          <td>기상청(Korea Meteorological Administration)</td>
+          <td>날씨 데이터 조회 (위도·경도 전달)</td>
+          <td>API 호출 즉시 파기</td>
+        </tr>
+        <tr>
+          <td>Anthropic, Inc.</td>
+          <td>AI 기반 오늘의 운세 생성</td>
+          <td>API 호출 즉시 파기 (개인 식별 정보 미전달)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 6 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>정보주체의 권리·의무 및 행사방법</h2>
+    </div>
+    <p>이용자는 언제든지 아래 권리를 행사할 수 있습니다.</p>
+    <ul>
+      <li>개인정보 열람 요구</li>
+      <li>오류 등이 있을 경우 정정 요구</li>
+      <li>삭제 요구</li>
+      <li>처리 정지 요구</li>
+    </ul>
+    <div class="highlight">
+      권리 행사는 아래 <strong>개인정보보호책임자</strong>에게 이메일로 요청하시면
+      지체 없이 조치합니다.
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>개인정보의 안전성 확보 조치</h2>
+    </div>
+    <p>하루는 개인정보의 안전성 확보를 위해 다음 조치를 취합니다.</p>
+    <ul>
+      <li><strong>전송 구간 암호화</strong>: 앱↔서버 간 전 구간 HTTPS(TLS) 통신</li>
+      <li><strong>최소 수집 원칙</strong>: 서비스에 필요한 최소한의 정보만 수집</li>
+      <li><strong>로컬 우선 저장</strong>: 가계부·일정 데이터는 기기 내 SQLite에만 저장하며 외부 서버 전송 없음</li>
+      <li><strong>접근 제한</strong>: 소셜 로그인 토큰은 기기의 보안 저장소(Secure Store)에만 보관</li>
+      <li><strong>API 키 보호</strong>: 외부 API 키는 서버 환경 변수에만 보관, 앱 코드에 미포함</li>
+    </ul>
+  </section>
+
+  <!-- 8 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>개인정보 자동 수집 장치</h2>
+    </div>
+    <p>하루는 쿠키(Cookie)를 사용하지 않습니다.</p>
+    <p>위치 정보는 날씨 기능 사용 시 이용자의 동의(앱 권한 허용)를 통해서만 수집하며, 권한을 거부해도 위치 기반 날씨 기능 외 나머지 기능은 정상 이용 가능합니다.</p>
+  </section>
+
+  <!-- 9 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <h2>만 14세 미만 아동의 개인정보</h2>
+    </div>
+    <p>하루는 만 14세 미만 아동의 개인정보를 수집하지 않습니다. 만 14세 미만인 경우 법정대리인의 동의가 필요하며, 확인된 경우 즉시 해당 정보를 삭제합니다.</p>
+  </section>
+
+  <!-- 10 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <h2>개인정보보호책임자</h2>
+    </div>
+    <p>개인정보 관련 문의, 불만 처리, 피해 구제 등은 아래 담당자에게 연락해 주세요.</p>
+    <dl class="contact-box">
+      <dt>성명</dt>
+      <dd>문태랑</dd>
+      <dt>이메일</dt>
+      <dd><a href="mailto:taerang0088@gmail.com" style="color:var(--primary)">taerang0088@gmail.com</a></dd>
+      <dt>처리 기간</dt>
+      <dd>문의 접수 후 7영업일 이내</dd>
+    </dl>
+    <p style="margin-top:14px; font-size:13px;">
+      기타 개인정보 침해 관련 신고나 상담은 아래 기관을 이용하실 수 있습니다.
+    </p>
+    <ul>
+      <li>개인정보 침해신고센터: privacy.kisa.or.kr / 국번없이 118</li>
+      <li>개인정보 분쟁조정위원회: www.kopico.go.kr / 1833-6972</li>
+      <li>대검찰청 사이버수사과: 국번없이 1301</li>
+      <li>경찰청 사이버수사국: ecrm.cyber.go.kr / 국번없이 182</li>
+    </ul>
+  </section>
+
+  <!-- 11 -->
+  <section>
+    <div class="section-header">
+      <div class="section-num">11</div>
+      <h2>개인정보처리방침 변경</h2>
+    </div>
+    <p>본 개인정보처리방침은 법령·정책·서비스 변경에 따라 내용이 변경될 수 있습니다.</p>
+    <p>변경 시 앱 내 공지 또는 본 페이지를 통해 변경 7일 전부터 안내합니다.</p>
+    <p>
+      <span class="tag">최초 시행일</span> 2025년 8월 19일
+    </p>
+  </section>
+
+  <footer>
+    <p>© 2025 하루(Haru). 모든 권리 보유.</p>
+    <p style="margin-top:6px;">본 방침은 대한민국 「개인정보 보호법」에 따라 작성되었습니다.</p>
+  </footer>
+
+</div>
+</body>
+</html>
