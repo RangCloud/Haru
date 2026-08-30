@@ -22,7 +22,7 @@ export interface User {
   name: string;
   email?: string;
   profileImage?: string;
-  provider: "google" | "kakao" | "naver";
+  provider: "google" | "guest";
 }
 
 interface AuthState {
@@ -32,6 +32,7 @@ interface AuthState {
   loadSession: () => Promise<void>;
   signIn: (user: User) => Promise<void>;
   signOut: () => Promise<void>;
+  continueAsGuest: () => Promise<void>;
 }
 
 // ── Store ──────────────────────────────────────────────────────
@@ -65,5 +66,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     await SecureStore.deleteItemAsync(SESSION_KEY);
     set({ user: null });
+  },
+
+  /** 게스트 모드 — 로그인 없이 앱 사용. 세션을 SecureStore에 저장해 재시작 후에도 유지. */
+  continueAsGuest: async () => {
+    const guest: User = { id: "guest", name: "게스트", provider: "guest" };
+    await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(guest));
+    set({ user: guest });
   },
 }));

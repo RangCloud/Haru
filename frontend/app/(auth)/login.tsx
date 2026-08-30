@@ -28,7 +28,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const colors = Colors[useColorScheme() ?? "light"];
-  const { signIn } = useAuthStore();
+  const { signIn, continueAsGuest } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
   // app.json scheme("haru")과 GCP Android 클라이언트가 기대하는 패키지명 기반
@@ -118,6 +118,21 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 게스트 모드 — 로그인 없이 시작 */}
+      <TouchableOpacity
+        style={styles.guestBtn}
+        onPress={async () => {
+          await continueAsGuest();
+          router.replace("/(tabs)");
+        }}
+        disabled={loading}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.guestText, { color: colors.subtext }]}>
+          로그인 없이 시작하기
+        </Text>
+      </TouchableOpacity>
+
       <Text style={[styles.notice, { color: colors.subtext }]}>
         로그인 시 이용약관 및 개인정보처리방침에{"\n"}동의하게 됩니다.
       </Text>
@@ -187,6 +202,14 @@ const styles = StyleSheet.create({
   btnText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  guestBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+  },
+  guestText: {
+    fontSize: 14,
+    textDecorationLine: "underline",
   },
   notice: {
     fontSize: 11,
