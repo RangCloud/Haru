@@ -1,11 +1,19 @@
 /**
  * 홈 화면
- * 이달 가계부 요약 + 오늘 일정 카드 + 테마 토글
+ * 이달 가계부 요약 + 오늘 일정 카드 + 투두리스트 + 테마 토글
  */
 
 import { router } from "expo-router";
-import { useEffect } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -13,6 +21,7 @@ import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
 import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
+import { useTodoStore } from "@/src/store/todoStore";
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
@@ -31,7 +40,6 @@ function formatAmount(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
 }
 
-// 테마 모드별 이모지 아이콘
 const THEME_ICON: Record<ThemeMode, string> = { system: "⚙️", light: "☀️", dark: "🌙" };
 const NEXT_MODE: Record<ThemeMode, ThemeMode> = { system: "light", light: "dark", dark: "system" };
 
@@ -121,6 +129,93 @@ function TodayScheduleCard({
   );
 }
 
+// ── 투두리스트 카드 ───────────────────────────────────────────
+
+function TodoCard({ colors }: { colors: typeof Colors.light }) {
+  const { todos, add, toggle, remove } = useTodoStore();
+  const [input, setInput] = useState("");
+  const inputRef = useRef<TextInput>(null);
+
+  const doneCount = todos.filter((t) => t.done).length;
+
+  const handleAdd = async () => {
+    if (!input.trim()) return;
+    await add(input.trim());
+    setInput("");
+  };
+
+  const handleLongPress = (id: number, title: string) => {
+    Alert.alert("할 일 삭제", `"${title}"을(를) 삭제할까요?`, [
+      { text: "취소", style: "cancel" },
+      { text: "삭제", style: "destructive", onPress: () => remove(id) },
+    ]);
+  };
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 할 일</Text>
+        {todos.length > 0 && (
+          <Text style={[styles.todoBadge, { color: colors.subtext }]}>
+            {doneCount}/{todos.length}
+          </Text>
+        )}
+      </View>
+
+      {/* 투두 목록 */}
+      {todos.length === 0 ? (
+        <Text style={[styles.emptyText, { color: colors.subtext }]}>할 일을 추가해보세요.</Text>
+      ) : (
+        todos.map((t) => (
+          <TouchableOpacity
+            key={t.id}
+            style={styles.todoItem}
+            onPress={() => toggle(t.id, !t.done)}
+            onLongPress={() => handleLongPress(t.id, t.title)}
+            activeOpacity={0.7}
+          >
+            {/* 체크박스 */}
+            <View style={[
+              styles.checkbox,
+              { borderColor: t.done ? colors.tint : colors.separator },
+              t.done && { backgroundColor: colors.tint },
+            ]}>
+              {t.done && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={[
+              styles.todoTitle,
+              { color: t.done ? colors.subtext : colors.text },
+              t.done && styles.todoTitleDone,
+            ]} numberOfLines={1}>
+              {t.title}
+            </Text>
+          </TouchableOpacity>
+        ))
+      )}
+
+      {/* 입력창 */}
+      <View style={[styles.todoInputRow, { borderTopColor: colors.separator }]}>
+        <TextInput
+          ref={inputRef}
+          style={[styles.todoInput, { color: colors.text }]}
+          placeholder="+ 할 일 추가"
+          placeholderTextColor={colors.subtext}
+          value={input}
+          onChangeText={setInput}
+          onSubmitEditing={handleAdd}
+          returnKeyType="done"
+          blurOnSubmit={false}
+        />
+        {input.trim().length > 0 && (
+          <TouchableOpacity onPress={handleAdd} style={styles.todoAddBtn}>
+            <Text style={[styles.todoAddText, { color: colors.tint }]}>추가</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
 // ── 메인 화면 ─────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -131,11 +226,13 @@ export default function HomeScreen() {
   const { totalIncome, totalExpense, balance, loadMonth } = useBudgetStore();
   const { monthSchedules, loadMonth: loadScheduleMonth } = useScheduleStore();
   const { mode, setMode } = useThemeStore();
+  const { load: loadTodos } = useTodoStore();
 
   useEffect(() => {
     const now = new Date();
     loadMonth(now.getFullYear(), now.getMonth() + 1);
     loadScheduleMonth(now.getFullYear(), now.getMonth() + 1);
+    loadTodos();
   }, []);
 
   const today = todayString();
@@ -152,6 +249,7 @@ export default function HomeScreen() {
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
     >
       {/* 헤더 */}
       <View style={styles.header}>
@@ -162,7 +260,6 @@ export default function HomeScreen() {
           <Text style={[styles.date, { color: colors.subtext }]}>{formatToday()}</Text>
         </View>
         <View style={styles.headerActions}>
-          {/* 테마 토글 — 탭할 때마다 system → light → dark → system 순환 */}
           <TouchableOpacity
             onPress={() => setMode(NEXT_MODE[mode])}
             style={styles.iconBtn}
@@ -175,12 +272,12 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 섹션 레이블 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>이번 달</Text>
       <BudgetSummaryCard income={totalIncome} expense={totalExpense} balance={balance} colors={colors} />
 
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘</Text>
       <TodayScheduleCard schedules={todaySchedules} colors={colors} />
+      <TodoCard colors={colors} />
     </ScrollView>
   );
 }
@@ -226,6 +323,7 @@ const styles = StyleSheet.create({
   },
   cardLabel: { fontSize: 13, fontWeight: "600", letterSpacing: 0.2 },
   cardLink: { fontSize: 13 },
+  emptyText: { fontSize: 14 },
   // ── 가계부 ────────────────────────────────────────────────
   budgetRow: { flexDirection: "row", alignItems: "center" },
   budgetItem: { flex: 1, alignItems: "center", gap: 5 },
@@ -238,5 +336,34 @@ const styles = StyleSheet.create({
   scheduleTitle: { flex: 1, fontSize: 14 },
   scheduleTime: { fontSize: 12 },
   moreText: { fontSize: 13, fontWeight: "500" },
-  emptyText: { fontSize: 14 },
+  // ── 투두 ──────────────────────────────────────────────────
+  todoBadge: { fontSize: 12 },
+  todoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 2,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkmark: { fontSize: 13, color: "#fff", fontWeight: "700" },
+  todoTitle: { flex: 1, fontSize: 14 },
+  todoTitleDone: { textDecorationLine: "line-through" },
+  todoInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    marginTop: 2,
+    gap: 8,
+  },
+  todoInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  todoAddBtn: { paddingHorizontal: 4 },
+  todoAddText: { fontSize: 14, fontWeight: "600" },
 });

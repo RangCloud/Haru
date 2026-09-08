@@ -48,6 +48,18 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       created_at TEXT    NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_sch_date ON schedules(date);
+
+    -- 투두리스트 테이블
+    -- done: 0(미완료) | 1(완료)
+    -- date: YYYY-MM-DD — 날짜별 조회 기준
+    CREATE TABLE IF NOT EXISTS todos (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      title      TEXT    NOT NULL,
+      done       INTEGER NOT NULL DEFAULT 0,
+      date       TEXT    NOT NULL,
+      created_at TEXT    NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_todo_date ON todos(date);
   `);
 
   return _db;
