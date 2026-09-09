@@ -7,8 +7,8 @@
  * - 격자 좌표 변환, 응답 파싱, 캐싱은 백엔드에서 처리
  */
 
-// Render 배포 URL — 개발/프로덕션 모두 동일하게 사용
-const API_BASE = "https://haru-bnsg.onrender.com";
+// Oracle Cloud 배포 URL
+const API_BASE = "https://haru-api.duckdns.org";
 
 // ── 응답 타입 ────────────────────────────────────────────────
 
