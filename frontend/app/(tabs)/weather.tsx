@@ -13,7 +13,7 @@ import { fetchWeather, type HourlyWeather, type WeatherData } from "@/src/api/we
 
 // ── 날씨 아이콘 ───────────────────────────────────────────────
 
-const SKY_ICON: Record<string, string> = { 맑음: "☀️", 구름많음: "⛅", 흐림: "☁️" };
+const SKY_ICON: Record<string, string> = { 맑음: "☀️", 구름조금: "🌤️", 구름많음: "⛅", 흐림: "☁️" };
 const RAIN_ICON: Record<string, string> = { 없음: "", 비: "🌧️", "비/눈": "🌨️", 눈: "❄️", 소나기: "⛈️" };
 
 function getWeatherIcon(sky: string, rainType: string): string {

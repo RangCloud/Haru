@@ -7,6 +7,7 @@ import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -233,6 +234,13 @@ export default function HomeScreen() {
     loadMonth(now.getFullYear(), now.getMonth() + 1);
     loadScheduleMonth(now.getFullYear(), now.getMonth() + 1);
     loadTodos();
+
+    // 백그라운드→포그라운드 복귀 시 투두 재로드
+    // 자정을 넘긴 채로 앱을 켜두면 전날 투두가 표시되는 문제 방지
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") loadTodos();
+    });
+    return () => sub.remove();
   }, []);
 
   const today = todayString();
