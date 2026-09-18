@@ -35,7 +35,7 @@ export default function LoginScreen() {
   // redirect URI("com.haru.app:/oauth2redirect/google") 불일치가 Error 400 원인.
   // makeRedirectUri({ native: ... })로 패키지명 스킴을 명시해 강제 사용.
   const redirectUri = makeRedirectUri({
-    native: "com.haru.app:/oauth2redirect/google",
+    native: "com.rangcloud.haru:/oauth2redirect/google",
   });
 
   const [request, response, promptGoogleAsync] = Google.useAuthRequest({
