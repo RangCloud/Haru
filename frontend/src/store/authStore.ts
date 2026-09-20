@@ -22,7 +22,7 @@ export interface User {
   name: string;
   email?: string;
   profileImage?: string;
-  provider: "google" | "guest";
+  provider: "google" | "apple" | "guest";
 }
 
 interface AuthState {
