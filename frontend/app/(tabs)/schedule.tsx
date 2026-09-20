@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -36,6 +37,33 @@ import { useScheduleStore } from "@/src/store/scheduleStore";
 function todayString(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * 실제 존재하는 날짜인지 검사한다.
+ * Date 객체를 생성해 월·일이 유지되는지 확인하므로 2025-02-30 같은 잘못된 날짜를 걸러낸다.
+ */
+function isValidDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1) return false;
+  const date = new Date(y, m - 1, d);
+  return date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+/** 숫자 입력을 YYYY-MM-DD 형식으로 자동 포맷한다 (예: "20250615" → "2025-06-15") */
+function autoFormatDate(input: string): string {
+  const digits = input.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
+
+/** 숫자 입력을 HH:MM 형식으로 자동 포맷한다 (예: "1430" → "14:30") */
+function autoFormatTime(input: string): string {
+  const digits = input.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
 }
 
 /** YYYY-MM-DD → Date 객체 */
@@ -156,14 +184,20 @@ interface ScheduleRowProps {
   item: ScheduleItem;
   colors: (typeof Colors)["light"];
   onDelete: () => void;
+  onEdit: () => void;
 }
 
-function ScheduleRow({ item, colors, onDelete }: ScheduleRowProps) {
+function ScheduleRow({ item, colors, onDelete, onEdit }: ScheduleRowProps) {
   const handleLongPress = () => {
-    Alert.alert("일정 삭제", `"${item.title}"을 삭제할까요?`, [
-      { text: "취소", style: "cancel" },
-      { text: "삭제", style: "destructive", onPress: onDelete },
-    ]);
+    Alert.alert(
+      "일정 관리",
+      item.title,
+      [
+        { text: "취소", style: "cancel" },
+        { text: "수정", onPress: onEdit },
+        { text: "삭제", style: "destructive", onPress: onDelete },
+      ],
+    );
   };
 
   return (
@@ -189,42 +223,64 @@ function ScheduleRow({ item, colors, onDelete }: ScheduleRowProps) {
 
 // ── 일정 추가 모달 ─────────────────────────────────────────────
 
-interface AddModalProps {
+interface AddEditModalProps {
   visible: boolean;
   initialDate: string;
   onClose: () => void;
-  onSubmit: (s: { title: string; date: string; time: string; note: string }) => void;
+  onAdd: (s: { title: string; date: string; time: string; note: string }) => void;
+  onUpdate: (s: { title: string; date: string; time: string; note: string }) => void;
   colors: (typeof Colors)["light"];
+  initialData?: ScheduleItem;   // 수정 모드일 때 기존 일정 데이터
 }
 
-function AddModal({ visible, initialDate, onClose, onSubmit, colors }: AddModalProps) {
+function AddEditModal({ visible, initialDate, onClose, onAdd, onUpdate, colors, initialData }: AddEditModalProps) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState("");
   const [note, setNote] = useState("");
 
-  // 모달이 열릴 때마다 선택된 날짜로 초기화
+  const isEdit = !!initialData;
+
+  // 모달이 열릴 때마다 폼 초기값 설정 — 수정 모드이면 기존 데이터로, 추가 모드이면 초기값으로
   useEffect(() => {
-    if (visible) setDate(initialDate);
-  }, [visible, initialDate]);
+    if (!visible) return;
+    if (initialData) {
+      setTitle(initialData.title);
+      setDate(initialData.date);
+      setTime(initialData.time);
+      setNote(initialData.note);
+    } else {
+      setTitle("");
+      setDate(initialDate);
+      setTime("");
+      setNote("");
+    }
+  }, [visible, initialDate, initialData]);
 
   const handleSubmit = () => {
     if (!title.trim()) {
       Alert.alert("입력 오류", "제목을 입력해 주세요.");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      Alert.alert("입력 오류", "날짜를 YYYY-MM-DD 형식으로 입력해 주세요.");
+    if (!isValidDate(date)) {
+      Alert.alert("입력 오류", "올바른 날짜를 입력해 주세요.\n예) 2025-06-15");
       return;
     }
-    if (time && !/^\d{2}:\d{2}$/.test(time)) {
-      Alert.alert("입력 오류", "시간을 HH:MM 형식으로 입력하거나 비워두세요.");
-      return;
+    if (time) {
+      // HH:MM 형식 + 실제 범위 검사 (00:00 ~ 23:59)
+      if (!/^\d{2}:\d{2}$/.test(time)) {
+        Alert.alert("입력 오류", "시간을 HH:MM 형식으로 입력하거나 비워두세요.");
+        return;
+      }
+      const [h, m] = time.split(":").map(Number);
+      if (h > 23 || m > 59) {
+        Alert.alert("입력 오류", "올바른 시간을 입력해 주세요.\n시(0-23), 분(0-59)");
+        return;
+      }
     }
-    onSubmit({ title: title.trim(), date, time, note: note.trim() });
-    setTitle("");
-    setTime("");
-    setNote("");
+    const data = { title: title.trim(), date, time, note: note.trim() };
+    if (isEdit) onUpdate(data);
+    else onAdd(data);
   };
 
   return (
@@ -235,7 +291,7 @@ function AddModal({ visible, initialDate, onClose, onSubmit, colors }: AddModalP
       >
         <View style={[styles.modalSheet, { backgroundColor: colors.background }]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>일정 추가</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "일정 수정" : "일정 추가"}</Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={[styles.modalClose, { color: colors.icon }]}>✕</Text>
             </TouchableOpacity>
@@ -248,7 +304,7 @@ function AddModal({ visible, initialDate, onClose, onSubmit, colors }: AddModalP
             placeholderTextColor={colors.icon}
             value={title}
             onChangeText={setTitle}
-            autoFocus
+            autoFocus={!isEdit}
           />
 
           <Text style={[styles.fieldLabel, { color: colors.icon }]}>날짜</Text>
@@ -256,8 +312,9 @@ function AddModal({ visible, initialDate, onClose, onSubmit, colors }: AddModalP
             style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
             placeholder="YYYY-MM-DD"
             placeholderTextColor={colors.icon}
+            keyboardType="number-pad"
             value={date}
-            onChangeText={setDate}
+            onChangeText={(t) => setDate(autoFormatDate(t))}
           />
 
           <Text style={[styles.fieldLabel, { color: colors.icon }]}>
@@ -267,9 +324,9 @@ function AddModal({ visible, initialDate, onClose, onSubmit, colors }: AddModalP
             style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
             placeholder="HH:MM  예) 14:30"
             placeholderTextColor={colors.icon}
+            keyboardType="number-pad"
             value={time}
-            onChangeText={setTime}
-            keyboardType="numbers-and-punctuation"
+            onChangeText={(t) => setTime(autoFormatTime(t))}
           />
 
           <Text style={[styles.fieldLabel, { color: colors.icon }]}>메모 (선택)</Text>
@@ -285,7 +342,7 @@ function AddModal({ visible, initialDate, onClose, onSubmit, colors }: AddModalP
             style={[styles.submitBtn, { backgroundColor: colors.tint }]}
             onPress={handleSubmit}
           >
-            <Text style={styles.submitBtnText}>추가하기</Text>
+            <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -300,9 +357,11 @@ export default function ScheduleScreen() {
   const {
     monthSchedules, selectedDate, selectedDateSchedules,
     year, month, isLoaded,
-    loadMonth, selectDate, add, remove,
+    loadMonth, selectDate, add, update, remove,
   } = useScheduleStore();
   const [modalVisible, setModalVisible] = useState(false);
+  // 수정 모드일 때 대상 일정 — undefined이면 추가 모드
+  const [editItem, setEditItem] = useState<ScheduleItem | undefined>(undefined);
 
   useEffect(() => {
     loadMonth(year, month);
@@ -326,7 +385,14 @@ export default function ScheduleScreen() {
 
   const handleAdd = async (s: Parameters<typeof add>[0]) => {
     setModalVisible(false);
+    setEditItem(undefined);
     await add(s);
+  };
+
+  const handleUpdate = async (s: { title: string; date: string; time: string; note: string }) => {
+    setModalVisible(false);
+    if (editItem) await update(editItem.id, s);
+    setEditItem(undefined);
   };
 
   // 선택된 날짜 레이블 (예: "6월 21일 토요일")
@@ -385,26 +451,34 @@ export default function ScheduleScreen() {
               item={item}
               colors={colors}
               onDelete={() => remove(item.id)}
+              onEdit={() => { setEditItem(item); setModalVisible(true); }}
             />
           )}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={() =>
+            selectedDateSchedules.length > 0
+              ? <Text style={[styles.hintText, { color: colors.icon }]}>항목을 길게 눌러 수정·삭제</Text>
+              : null
+          }
         />
       )}
 
       {/* 일정 추가 버튼 */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.tint }]}
-        onPress={() => setModalVisible(true)}
+        onPress={() => { setEditItem(undefined); setModalVisible(true); }}
       >
         <Text style={styles.fabText}>+ 일정 추가</Text>
       </TouchableOpacity>
 
-      <AddModal
+      <AddEditModal
         visible={modalVisible}
         initialDate={selectedDate}
-        onClose={() => setModalVisible(false)}
-        onSubmit={handleAdd}
+        onClose={() => { setModalVisible(false); setEditItem(undefined); }}
+        onAdd={handleAdd}
+        onUpdate={handleUpdate}
         colors={colors}
+        initialData={editItem}
       />
     </View>
   );
@@ -412,7 +486,11 @@ export default function ScheduleScreen() {
 
 // ── 스타일 ───────────────────────────────────────────────────
 
-const CELL_SIZE = 44;
+// 화면 너비에 맞게 달력 셀 크기를 동적으로 계산한다.
+// paddingHorizontal: 12 × 2 = 24px을 제외한 나머지를 7열로 균등 분할.
+// 고정값 44를 쓰면 넓은 화면에서 달력이 왼쪽으로 몰리는 문제가 있었음.
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CELL_SIZE = Math.floor((SCREEN_WIDTH - 24) / 7);
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
@@ -526,4 +604,5 @@ const styles = StyleSheet.create({
   },
   submitBtn: { marginTop: 16, paddingVertical: 16, borderRadius: 14, alignItems: "center" },
   submitBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  hintText: { fontSize: 11, textAlign: "center", paddingTop: 8, paddingBottom: 90 },
 });

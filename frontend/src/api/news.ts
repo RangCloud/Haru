@@ -33,12 +33,23 @@ export async function fetchNews(
 ): Promise<NewsData> {
   const url = `${API_BASE}/api/news?keyword=${encodeURIComponent(keyword)}&display=${display}`;
 
-  const res = await fetch(url);
+  // 10초 초과 시 취소 — 네이버 API 지연 시 뉴스 카드가 무한 로딩되는 현상 방지
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { detail?: string }).detail ?? `뉴스 조회 실패 (HTTP ${res.status})`);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as { detail?: string }).detail ?? `뉴스 조회 실패 (HTTP ${res.status})`);
+    }
+
+    return res.json() as Promise<NewsData>;
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("뉴스 요청 시간이 초과됐습니다.");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json() as Promise<NewsData>;
 }

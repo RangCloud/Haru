@@ -13,6 +13,7 @@ import {
   addTransaction,
   deleteTransaction,
   getTransactionsByMonth,
+  updateTransaction,
   type NewTransaction,
   type Transaction,
 } from "@/src/db/budget";
@@ -33,6 +34,7 @@ interface BudgetState {
   // 액션
   loadMonth: (year: number, month: number) => Promise<void>;
   add: (t: NewTransaction) => Promise<void>;
+  update: (id: number, t: Partial<NewTransaction>) => Promise<void>;
   remove: (id: number) => Promise<void>;
 }
 
@@ -70,6 +72,14 @@ export const useBudgetStore = create<BudgetState>((set, get) => ({
   /** 거래를 추가하고 현재 월 상태를 갱신한다 */
   add: async (t) => {
     await addTransaction(t);
+    const { year, month } = get();
+    const transactions = await getTransactionsByMonth(year, month);
+    set({ transactions, ...calcSummary(transactions) });
+  },
+
+  /** 거래를 수정하고 현재 월 상태를 갱신한다 */
+  update: async (id, t) => {
+    await updateTransaction(id, t);
     const { year, month } = get();
     const transactions = await getTransactionsByMonth(year, month);
     set({ transactions, ...calcSummary(transactions) });

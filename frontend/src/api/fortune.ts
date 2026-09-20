@@ -24,12 +24,23 @@ export interface FortuneData {
 export async function fetchFortune(sign = "general"): Promise<FortuneData> {
   const url = `${API_BASE}/api/fortune?sign=${encodeURIComponent(sign)}`;
 
-  const res = await fetch(url);
+  // 15초 초과 시 취소 — Claude API 응답이 느릴 때 대비 (캐시 미스 시 생성 시간 고려)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { detail?: string }).detail ?? `운세 조회 실패 (HTTP ${res.status})`);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as { detail?: string }).detail ?? `운세 조회 실패 (HTTP ${res.status})`);
+    }
+
+    return res.json() as Promise<FortuneData>;
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("운세 요청 시간이 초과됐습니다.");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json() as Promise<FortuneData>;
 }

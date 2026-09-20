@@ -11,6 +11,7 @@ import {
   addSchedule,
   deleteSchedule,
   getSchedulesByMonth,
+  updateSchedule,
   type NewScheduleItem,
   type ScheduleItem,
 } from "@/src/db/schedule";
@@ -31,6 +32,7 @@ interface ScheduleState {
   loadMonth: (year: number, month: number) => Promise<void>;
   selectDate: (date: string) => void;
   add: (s: NewScheduleItem) => Promise<void>;
+  update: (id: number, s: Partial<NewScheduleItem>) => Promise<void>;
   remove: (id: number) => Promise<void>;
 }
 
@@ -86,6 +88,17 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   /** 일정을 추가하고 현재 월 상태를 갱신한다 */
   add: async (s) => {
     await addSchedule(s);
+    const { year, month, selectedDate } = get();
+    const monthSchedules = await getSchedulesByMonth(year, month);
+    set({
+      monthSchedules,
+      selectedDateSchedules: filterByDate(monthSchedules, selectedDate),
+    });
+  },
+
+  /** 일정을 수정하고 현재 월 상태를 갱신한다 */
+  update: async (id, s) => {
+    await updateSchedule(id, s);
     const { year, month, selectedDate } = get();
     const monthSchedules = await getSchedulesByMonth(year, month);
     set({

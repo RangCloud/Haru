@@ -171,14 +171,21 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         {/* Apple 로그인 — iOS 전용 (App Store 심사 규정 Guideline 4.8 필수) */}
+        {/* AppleAuthenticationButton은 disabled prop이 없으므로,
+            로딩 중에는 pointerEvents="none"으로 터치 이벤트를 차단하고 opacity를 줄인다 */}
         {appleAvailable && (
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={14}
-            style={styles.appleBtn}
-            onPress={handleAppleLogin}
-          />
+          <View
+            pointerEvents={loading ? "none" : "auto"}
+            style={{ opacity: loading ? 0.5 : 1 }}
+          >
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={14}
+              style={styles.appleBtn}
+              onPress={handleAppleLogin}
+            />
+          </View>
         )}
       </View>
 

@@ -65,3 +65,29 @@ export async function deleteSchedule(id: number): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(`DELETE FROM schedules WHERE id = ?`, [id]);
 }
+
+/**
+ * 일정을 수정한다.
+ * 변경할 필드만 동적으로 업데이트한다.
+ */
+export async function updateSchedule(
+  id: number,
+  s: Partial<NewScheduleItem>,
+): Promise<void> {
+  const db = await getDatabase();
+  const fields: string[] = [];
+  const values: (string | number)[] = [];
+
+  if (s.title !== undefined) { fields.push("title = ?"); values.push(s.title); }
+  if (s.date !== undefined)  { fields.push("date = ?");  values.push(s.date); }
+  if (s.time !== undefined)  { fields.push("time = ?");  values.push(s.time); }
+  if (s.note !== undefined)  { fields.push("note = ?");  values.push(s.note); }
+
+  if (fields.length === 0) return;
+  values.push(id);
+
+  await db.runAsync(
+    `UPDATE schedules SET ${fields.join(", ")} WHERE id = ?`,
+    values,
+  );
+}

@@ -229,16 +229,29 @@ export default function HomeScreen() {
   const { mode, setMode } = useThemeStore();
   const { load: loadTodos } = useTodoStore();
 
+  // 앱이 마지막으로 포그라운드에 있었던 날짜 — 자정 감지용
+  const lastActiveDateRef = useRef(todayString());
+
   useEffect(() => {
     const now = new Date();
     loadMonth(now.getFullYear(), now.getMonth() + 1);
     loadScheduleMonth(now.getFullYear(), now.getMonth() + 1);
     loadTodos();
 
-    // 백그라운드→포그라운드 복귀 시 투두 재로드
-    // 자정을 넘긴 채로 앱을 켜두면 전날 투두가 표시되는 문제 방지
+    // 백그라운드→포그라운드 복귀 시 날짜 변경 여부를 확인해 데이터 전체를 갱신한다.
+    // 자정을 넘긴 채로 앱을 백그라운드에 두면 이전 날짜의 투두·가계부·일정이 표시되는 버그 방지.
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") loadTodos();
+      if (state === "active") {
+        const current = new Date();
+        const currentDate = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+        loadTodos();
+        if (currentDate !== lastActiveDateRef.current) {
+          // 날짜가 바뀌었으면 가계부·일정 요약도 해당 월 기준으로 재로드
+          loadMonth(current.getFullYear(), current.getMonth() + 1);
+          loadScheduleMonth(current.getFullYear(), current.getMonth() + 1);
+          lastActiveDateRef.current = currentDate;
+        }
+      }
     });
     return () => sub.remove();
   }, []);

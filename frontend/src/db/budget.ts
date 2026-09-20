@@ -65,3 +65,30 @@ export async function deleteTransaction(id: number): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(`DELETE FROM transactions WHERE id = ?`, [id]);
 }
+
+/**
+ * 거래 내역을 수정한다.
+ * 변경할 필드만 동적으로 업데이트하므로 일부 필드만 넘겨도 동작한다.
+ */
+export async function updateTransaction(
+  id: number,
+  t: Partial<NewTransaction>,
+): Promise<void> {
+  const db = await getDatabase();
+  const fields: string[] = [];
+  const values: (string | number)[] = [];
+
+  if (t.type !== undefined)     { fields.push("type = ?");     values.push(t.type); }
+  if (t.amount !== undefined)   { fields.push("amount = ?");   values.push(t.amount); }
+  if (t.category !== undefined) { fields.push("category = ?"); values.push(t.category); }
+  if (t.note !== undefined)     { fields.push("note = ?");     values.push(t.note); }
+  if (t.date !== undefined)     { fields.push("date = ?");     values.push(t.date); }
+
+  if (fields.length === 0) return;
+  values.push(id);
+
+  await db.runAsync(
+    `UPDATE transactions SET ${fields.join(", ")} WHERE id = ?`,
+    values,
+  );
+}

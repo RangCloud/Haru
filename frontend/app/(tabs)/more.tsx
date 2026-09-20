@@ -22,6 +22,22 @@ function FortuneCard({ data, colors }: { data: FortuneData; colors: typeof Color
   );
 }
 
+// ── 유틸 ─────────────────────────────────────────────────────
+
+/**
+ * 뉴스 발행일 포맷팅 — Naver API는 RFC 2822 형식("Mon, 15 Jun 2025 14:30:00 +0900")을 반환한다.
+ * Date 파싱 후 "6월 15일 14:30" 형식으로 변환한다. 파싱 실패 시 원문 그대로 반환.
+ */
+function formatPubDate(s: string): string {
+  try {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } catch {
+    return s;
+  }
+}
+
 // ── 뉴스 카드 ────────────────────────────────────────────────
 
 function NewsCard({ item, colors, onPress }: { item: NewsItem; colors: typeof Colors.light; onPress: () => void }) {
@@ -34,6 +50,9 @@ function NewsCard({ item, colors, onPress }: { item: NewsItem; colors: typeof Co
       <Text style={[styles.newsTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
       {item.summary ? (
         <Text style={[styles.newsSummary, { color: colors.subtext }]} numberOfLines={2}>{item.summary}</Text>
+      ) : null}
+      {item.pub_date ? (
+        <Text style={[styles.newsPubDate, { color: colors.subtext }]}>{formatPubDate(item.pub_date)}</Text>
       ) : null}
     </TouchableOpacity>
   );
@@ -49,23 +68,35 @@ export default function MoreScreen() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // 운세·뉴스 오류를 독립적으로 관리 — 하나 실패해도 나머지는 정상 표시
+  const [fortuneError, setFortuneError] = useState<string | null>(null);
+  const [newsError, setNewsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
-    try {
-      const [fortuneData, newsData] = await Promise.all([
-        fetchFortune("general"),
-        fetchNews("오늘 뉴스", 10),
-      ]);
-      setFortune(fortuneData);
-      setNews(newsData.items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "데이터를 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    setFortuneError(null);
+    setNewsError(null);
+
+    // Promise.all 대신 Promise.allSettled 사용:
+    // 운세 API가 실패해도 뉴스는 표시되고, 뉴스가 실패해도 운세는 표시된다.
+    const [fortuneResult, newsResult] = await Promise.allSettled([
+      fetchFortune("general"),
+      fetchNews("오늘 뉴스", 10),
+    ]);
+
+    if (fortuneResult.status === "fulfilled") {
+      setFortune(fortuneResult.value);
+    } else {
+      setFortuneError(fortuneResult.reason instanceof Error ? fortuneResult.reason.message : "운세를 불러오지 못했습니다.");
     }
+
+    if (newsResult.status === "fulfilled") {
+      setNews(newsResult.value.items);
+    } else {
+      setNewsError(newsResult.reason instanceof Error ? newsResult.reason.message : "뉴스를 불러오지 못했습니다.");
+    }
+
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -80,17 +111,15 @@ export default function MoreScreen() {
     );
   }
 
-  if (error) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={styles.errorEmoji}>⚠️</Text>
-        <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
-        <TouchableOpacity onPress={load} style={[styles.retryBtn, { backgroundColor: colors.tint }]}>
-          <Text style={styles.retryBtnText}>다시 시도</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // 섹션별 오류 표시를 위한 헬퍼 컴포넌트
+  const SectionError = ({ message, onRetry }: { message: string; onRetry: () => void }) => (
+    <View style={[styles.sectionError, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <Text style={[styles.sectionErrorText, { color: colors.subtext }]}>{message}</Text>
+      <TouchableOpacity onPress={onRetry}>
+        <Text style={[styles.retryLink, { color: colors.tint }]}>다시 시도</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <ScrollView
@@ -102,20 +131,28 @@ export default function MoreScreen() {
 
       {/* 운세 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 운세 🔮</Text>
-      {fortune && <FortuneCard data={fortune} colors={colors} />}
+      {fortuneError
+        ? <SectionError message={fortuneError} onRetry={load} />
+        : fortune && <FortuneCard data={fortune} colors={colors} />
+      }
 
       {/* 뉴스 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 뉴스 📰</Text>
-      <View style={[styles.newsList, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
-        {news.map((item, idx) => (
-          <NewsCard
-            key={idx}
-            item={item}
-            colors={colors}
-            onPress={() => Linking.openURL(item.link).catch(() => {})}
-          />
-        ))}
-      </View>
+      {newsError
+        ? <SectionError message={newsError} onRetry={load} />
+        : (
+          <View style={[styles.newsList, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+            {news.map((item, idx) => (
+              <NewsCard
+                key={idx}
+                item={item}
+                colors={colors}
+                onPress={() => Linking.openURL(item.link).catch(() => {})}
+              />
+            ))}
+          </View>
+        )
+      }
     </ScrollView>
   );
 }
@@ -123,10 +160,6 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, padding: 24 },
   statusText: { fontSize: 14 },
-  errorEmoji: { fontSize: 40 },
-  errorText: { fontSize: 15, textAlign: "center", lineHeight: 24 },
-  retryBtn: { marginTop: 8, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 },
-  retryBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   container: { padding: 24, paddingTop: 64, gap: 8 },
   screenTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5, marginBottom: 12 },
   sectionLabel: {
@@ -160,4 +193,17 @@ const styles = StyleSheet.create({
   },
   newsTitle: { fontSize: 14, fontWeight: "600", lineHeight: 20 },
   newsSummary: { fontSize: 12, lineHeight: 18 },
+  newsPubDate: { fontSize: 11, lineHeight: 16, marginTop: 2 },
+  // ── 섹션별 오류 ───────────────────────────────────────────
+  sectionError: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  sectionErrorText: { fontSize: 13, flex: 1 },
+  retryLink: { fontSize: 13, fontWeight: "600", marginLeft: 8 },
 });

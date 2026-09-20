@@ -35,13 +35,24 @@ export interface WeatherData {
 export async function fetchWeather(lat: number, lon: number): Promise<WeatherData> {
   const url = `${API_BASE}/api/weather?lat=${lat}&lon=${lon}`;
 
-  const res = await fetch(url);
+  // 10초 초과 시 요청 취소 — 기상청 API가 느릴 때 화면이 무한 로딩되는 현상 방지
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
 
-  if (!res.ok) {
-    // 백엔드가 반환한 detail 메시지를 그대로 노출
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `날씨 조회 실패 (HTTP ${res.status})`);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+
+    if (!res.ok) {
+      // 백엔드가 반환한 detail 메시지를 그대로 노출
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? `날씨 조회 실패 (HTTP ${res.status})`);
+    }
+
+    return res.json() as Promise<WeatherData>;
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("날씨 요청 시간이 초과됐습니다.");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json() as Promise<WeatherData>;
 }
