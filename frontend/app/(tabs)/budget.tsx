@@ -161,8 +161,9 @@ function AddEditModal({ visible, onClose, onAdd, onUpdate, colors, initialData }
 
   const switchType = (t: "income" | "expense") => {
     setType(t);
-    // 수정 모드에서 카테고리는 유지 (타입 변경 시만 초기화)
-    if (!isEdit) setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
+    // 수입↔지출 전환 시 카테고리를 초기화한다.
+    // 수정 모드에서도 전환하면 이전 타입의 카테고리(예: "급여")가 잘못된 타입으로 저장되므로 반드시 초기화.
+    setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
   };
 
   // 숫자만 추출해 천 단위 콤마를 자동으로 붙인다 (예: "123456" → "123,456")

@@ -11,6 +11,26 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchFortune, type FortuneData } from "@/src/api/fortune";
 import { fetchNews, type NewsItem } from "@/src/api/news";
 
+// ── 섹션별 오류 카드 ──────────────────────────────────────────
+// 컴포넌트를 MoreScreen 밖에 정의해야 매 렌더마다 새 타입이 생성되는 React 안티패턴을 피할 수 있다.
+
+function SectionError({
+  message, onRetry, colors,
+}: {
+  message: string;
+  onRetry: () => void;
+  colors: typeof Colors.light;
+}) {
+  return (
+    <View style={[styles.sectionError, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <Text style={[styles.sectionErrorText, { color: colors.subtext }]}>{message}</Text>
+      <TouchableOpacity onPress={onRetry}>
+        <Text style={[styles.retryLink, { color: colors.tint }]}>다시 시도</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ── 운세 카드 ────────────────────────────────────────────────
 
 function FortuneCard({ data, colors }: { data: FortuneData; colors: typeof Colors.light }) {
@@ -111,16 +131,6 @@ export default function MoreScreen() {
     );
   }
 
-  // 섹션별 오류 표시를 위한 헬퍼 컴포넌트
-  const SectionError = ({ message, onRetry }: { message: string; onRetry: () => void }) => (
-    <View style={[styles.sectionError, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-      <Text style={[styles.sectionErrorText, { color: colors.subtext }]}>{message}</Text>
-      <TouchableOpacity onPress={onRetry}>
-        <Text style={[styles.retryLink, { color: colors.tint }]}>다시 시도</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
@@ -132,24 +142,27 @@ export default function MoreScreen() {
       {/* 운세 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 운세 🔮</Text>
       {fortuneError
-        ? <SectionError message={fortuneError} onRetry={load} />
+        ? <SectionError message={fortuneError} onRetry={load} colors={colors} />
         : fortune && <FortuneCard data={fortune} colors={colors} />
       }
 
       {/* 뉴스 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 뉴스 📰</Text>
       {newsError
-        ? <SectionError message={newsError} onRetry={load} />
+        ? <SectionError message={newsError} onRetry={load} colors={colors} />
         : (
           <View style={[styles.newsList, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
-            {news.map((item, idx) => (
-              <NewsCard
-                key={idx}
-                item={item}
-                colors={colors}
-                onPress={() => Linking.openURL(item.link).catch(() => {})}
-              />
-            ))}
+            {news.length === 0
+              ? <Text style={[styles.newsEmpty, { color: colors.subtext }]}>뉴스를 가져오지 못했습니다.</Text>
+              : news.map((item, idx) => (
+                <NewsCard
+                  key={idx}
+                  item={item}
+                  colors={colors}
+                  onPress={() => Linking.openURL(item.link).catch(() => {})}
+                />
+              ))
+            }
           </View>
         )
       }
@@ -191,6 +204,7 @@ const styles = StyleSheet.create({
     gap: 5,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  newsEmpty: { fontSize: 13, padding: 16, textAlign: "center" },
   newsTitle: { fontSize: 14, fontWeight: "600", lineHeight: 20 },
   newsSummary: { fontSize: 12, lineHeight: 18 },
   newsPubDate: { fontSize: 11, lineHeight: 16, marginTop: 2 },
