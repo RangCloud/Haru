@@ -8,7 +8,6 @@ import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Tex
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { fetchFortune, type FortuneData } from "@/src/api/fortune";
 import { fetchNews, type NewsItem } from "@/src/api/news";
 
 // ── 섹션별 오류 카드 ──────────────────────────────────────────
@@ -31,16 +30,6 @@ function SectionError({
   );
 }
 
-// ── 운세 카드 ────────────────────────────────────────────────
-
-function FortuneCard({ data, colors }: { data: FortuneData; colors: typeof Colors.light }) {
-  return (
-    <View style={[styles.fortuneCard, { backgroundColor: colors.tintLight, borderColor: colors.cardBorder }, cardShadow]}>
-      <Text style={[styles.fortuneContent, { color: colors.text }]}>{data.content}</Text>
-      <Text style={[styles.fortuneMeta, { color: colors.subtext }]}>{data.date} 기준</Text>
-    </View>
-  );
-}
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
@@ -84,23 +73,13 @@ export default function MoreScreen() {
   const scheme = useColorScheme();
   const colors = Colors[scheme];
 
-  const [fortune, setFortune] = useState<FortuneData | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // 운세·뉴스 오류를 독립적으로 관리 — 하나 실패해도 나머지는 정상 표시
-  const [fortuneError, setFortuneError] = useState<string | null>(null);
   const [newsError, setNewsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setFortuneError(null);
     setNewsError(null);
-
-    // Promise.all 대신 Promise.allSettled 사용:
-    // 운세 API가 실패해도 뉴스는 표시되고, 뉴스가 실패해도 운세는 표시된다.
-    // more.tsx는 탭에서 숨겨짐 — 운세는 fortune.tsx로 이전됨
-    setFortuneError("운세 탭을 이용하세요.");
-
     const [newsResult] = await Promise.allSettled([fetchNews("오늘 뉴스", 10)]);
 
     if (newsResult.status === "fulfilled") {
@@ -133,12 +112,7 @@ export default function MoreScreen() {
     >
       <Text style={[styles.screenTitle, { color: colors.text }]}>더보기</Text>
 
-      {/* 운세 */}
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 운세 🔮</Text>
-      {fortuneError
-        ? <SectionError message={fortuneError} onRetry={load} colors={colors} />
-        : fortune && <FortuneCard data={fortune} colors={colors} />
-      }
+      {/* 운세는 운세 탭으로 이전됨 */}
 
       {/* 뉴스 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 뉴스 📰</Text>
