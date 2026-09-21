@@ -1,6 +1,6 @@
 /**
- * 더보기 화면 — 오늘의 운세 + 오늘의 뉴스
- * 외부 API는 반드시 백엔드(/api/fortune, /api/news)를 경유한다.
+ * 뉴스 탭 — 오늘의 뉴스
+ * 외부 API는 반드시 백엔드(/api/news)를 경유한다.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -8,11 +8,10 @@ import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Tex
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { fetchFortune, type FortuneData } from "@/src/api/fortune";
 import { fetchNews, type NewsItem } from "@/src/api/news";
 
-// ── 섹션별 오류 카드 ──────────────────────────────────────────
-// 컴포넌트를 MoreScreen 밖에 정의해야 매 렌더마다 새 타입이 생성되는 React 안티패턴을 피할 수 있다.
+// ── 섹션 오류 카드 ─────────────────────────────────────────────
+// 컴포넌트를 화면 바깥에 정의해야 매 렌더마다 unmount/remount 되는 React 안티패턴을 피한다.
 
 function SectionError({
   message, onRetry, colors,
@@ -27,17 +26,6 @@ function SectionError({
       <TouchableOpacity onPress={onRetry}>
         <Text style={[styles.retryLink, { color: colors.tint }]}>다시 시도</Text>
       </TouchableOpacity>
-    </View>
-  );
-}
-
-// ── 운세 카드 ────────────────────────────────────────────────
-
-function FortuneCard({ data, colors }: { data: FortuneData; colors: typeof Colors.light }) {
-  return (
-    <View style={[styles.fortuneCard, { backgroundColor: colors.tintLight, borderColor: colors.cardBorder }, cardShadow]}>
-      <Text style={[styles.fortuneContent, { color: colors.text }]}>{data.content}</Text>
-      <Text style={[styles.fortuneMeta, { color: colors.subtext }]}>{data.date} 기준</Text>
     </View>
   );
 }
@@ -78,39 +66,28 @@ function NewsCard({ item, colors, onPress }: { item: NewsItem; colors: typeof Co
   );
 }
 
-// ── 메인 화면 ────────────────────────────────────────────────
+// ── 메인 화면 ─────────────────────────────────────────────────
 
-export default function MoreScreen() {
+export default function NewsScreen() {
   const scheme = useColorScheme();
   const colors = Colors[scheme];
 
-  const [fortune, setFortune] = useState<FortuneData | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // 운세·뉴스 오류를 독립적으로 관리 — 하나 실패해도 나머지는 정상 표시
-  const [fortuneError, setFortuneError] = useState<string | null>(null);
   const [newsError, setNewsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setFortuneError(null);
     setNewsError(null);
-
-    // Promise.all 대신 Promise.allSettled 사용:
-    // 운세 API가 실패해도 뉴스는 표시되고, 뉴스가 실패해도 운세는 표시된다.
-    // more.tsx는 탭에서 숨겨짐 — 운세는 fortune.tsx로 이전됨
-    setFortuneError("운세 탭을 이용하세요.");
-
-    const [newsResult] = await Promise.allSettled([fetchNews("오늘 뉴스", 10)]);
-
-    if (newsResult.status === "fulfilled") {
-      setNews(newsResult.value.items);
-    } else {
-      setNewsError(newsResult.reason instanceof Error ? newsResult.reason.message : "뉴스를 불러오지 못했습니다.");
+    try {
+      const result = await fetchNews("오늘 뉴스", 10);
+      setNews(result.items);
+    } catch (e) {
+      setNewsError(e instanceof Error ? e.message : "뉴스를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    setLoading(false);
-    setRefreshing(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -120,7 +97,7 @@ export default function MoreScreen() {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.tint} />
-        <Text style={[styles.statusText, { color: colors.subtext }]}>운세와 뉴스를 불러오는 중...</Text>
+        <Text style={[styles.statusText, { color: colors.subtext }]}>뉴스를 불러오는 중...</Text>
       </View>
     );
   }
@@ -131,17 +108,8 @@ export default function MoreScreen() {
       contentContainerStyle={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
     >
-      <Text style={[styles.screenTitle, { color: colors.text }]}>더보기</Text>
+      <Text style={[styles.screenTitle, { color: colors.text }]}>뉴스 📰</Text>
 
-      {/* 운세 */}
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 운세 🔮</Text>
-      {fortuneError
-        ? <SectionError message={fortuneError} onRetry={load} colors={colors} />
-        : fortune && <FortuneCard data={fortune} colors={colors} />
-      }
-
-      {/* 뉴스 */}
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘의 뉴스 📰</Text>
       {newsError
         ? <SectionError message={newsError} onRetry={load} colors={colors} />
         : (
@@ -169,24 +137,6 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 14 },
   container: { padding: 24, paddingTop: 64, gap: 8 },
   screenTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5, marginBottom: 12 },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  // ── 운세 카드 ──────────────────────────────────────────────
-  fortuneCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 22,
-    gap: 10,
-    marginBottom: 8,
-  },
-  fortuneContent: { fontSize: 15, lineHeight: 26 },
-  fortuneMeta: { fontSize: 12 },
   // ── 뉴스 ──────────────────────────────────────────────────
   newsList: {
     borderRadius: 16,
@@ -202,7 +152,7 @@ const styles = StyleSheet.create({
   newsTitle: { fontSize: 14, fontWeight: "600", lineHeight: 20 },
   newsSummary: { fontSize: 12, lineHeight: 18 },
   newsPubDate: { fontSize: 11, lineHeight: 16, marginTop: 2 },
-  // ── 섹션별 오류 ───────────────────────────────────────────
+  // ── 섹션 오류 ─────────────────────────────────────────────
   sectionError: {
     borderRadius: 12,
     borderWidth: 1,
@@ -210,7 +160,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
   },
   sectionErrorText: { fontSize: 13, flex: 1 },
   retryLink: { fontSize: 13, fontWeight: "600", marginLeft: 8 },

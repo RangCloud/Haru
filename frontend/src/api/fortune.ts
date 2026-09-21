@@ -14,15 +14,33 @@ const API_BASE = "https://haru-api.duckdns.org";
 
 export interface FortuneData {
   date: string;      // 기준 날짜 (예: "2025-06-16")
-  sign: string;      // 별자리(영문) 또는 "general"
+  sign: string;      // "personal" (생년월일 기반) 또는 "general"
   content: string;   // 오늘의 운세 텍스트
   cached: boolean;   // 캐시된 응답 여부
 }
 
+// ── 요청 파라미터 타입 ────────────────────────────────────────
+
+export interface FortuneFetchParams {
+  birthYear: number;
+  birthMonth: number;
+  birthMonthType: "solar" | "lunar"; // 양력/음력
+  birthDay: number;
+  birthHour?: number; // 모르면 undefined
+}
+
 // ── API 호출 ─────────────────────────────────────────────────
 
-export async function fetchFortune(sign = "general"): Promise<FortuneData> {
-  const url = `${API_BASE}/api/fortune?sign=${encodeURIComponent(sign)}`;
+export async function fetchFortune(params: FortuneFetchParams): Promise<FortuneData> {
+  const query = new URLSearchParams({
+    birth_year: String(params.birthYear),
+    birth_month: String(params.birthMonth),
+    birth_month_type: params.birthMonthType,
+    birth_day: String(params.birthDay),
+    ...(params.birthHour !== undefined ? { birth_hour: String(params.birthHour) } : {}),
+  });
+
+  const url = `${API_BASE}/api/fortune?${query.toString()}`;
 
   // 15초 초과 시 취소 — Claude API 응답이 느릴 때 대비 (캐시 미스 시 생성 시간 고려)
   const controller = new AbortController();

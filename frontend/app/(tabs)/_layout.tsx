@@ -1,6 +1,9 @@
 /**
  * 하루 앱 탭 레이아웃
- * 5개 탭: 홈 · 날씨 · 가계부 · 일정 · 더보기
+ * 5개 탭: 홈 · 일정+가계부 · 날씨 · 운세 · 뉴스
+ *
+ * - budget 탭은 schedule에 통합되어 별도 탭 아이콘을 숨긴다 (href: null)
+ * - more 탭도 숨긴다 (뉴스 탭으로 대체)
  */
 
 import { Tabs } from "expo-router";
@@ -46,24 +49,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="weather"
-        options={{
-          title: "날씨",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="cloud.sun.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="budget"
-        options={{
-          title: "가계부",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="wonsign.circle.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="schedule"
         options={{
           title: "일정",
@@ -73,13 +58,41 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="more"
+        name="weather"
         options={{
-          title: "더보기",
+          title: "날씨",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="ellipsis.circle.fill" color={color} />
+            <IconSymbol size={24} name="cloud.sun.fill" color={color} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="fortune"
+        options={{
+          title: "운세",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={24} name="sparkles" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="news"
+        options={{
+          title: "뉴스",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={24} name="newspaper.fill" color={color} />
+          ),
+        }}
+      />
+      {/* 가계부는 일정 탭에 통합 — 독립 탭에서는 숨긴다 */}
+      <Tabs.Screen
+        name="budget"
+        options={{ href: null }}
+      />
+      {/* 더보기 탭은 뉴스 탭으로 대체 — 접근 경로 비활성화 */}
+      <Tabs.Screen
+        name="more"
+        options={{ href: null }}
       />
     </Tabs>
   );

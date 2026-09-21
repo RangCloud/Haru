@@ -1,6 +1,6 @@
 /**
  * 홈 화면
- * 이달 가계부 요약 + 오늘 일정 카드 + 투두리스트 + 테마 토글
+ * 오늘 일정 → 투두리스트 → 이달 가계부 요약 + 테마 토글
  */
 
 import { router } from "expo-router";
@@ -55,7 +55,7 @@ function BudgetSummaryCard({
   return (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}
-      onPress={() => router.push("/(tabs)/budget")}
+      onPress={() => router.push("/(tabs)/schedule")}
       activeOpacity={0.75}
     >
       <View style={styles.cardHeader}>
@@ -293,12 +293,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>이번 달</Text>
-      <BudgetSummaryCard income={totalIncome} expense={totalExpense} balance={balance} colors={colors} />
-
+      {/* 오늘 일정을 최상단에 배치 — 당일 할 일을 가장 먼저 확인하도록 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘</Text>
       <TodayScheduleCard schedules={todaySchedules} colors={colors} />
       <TodoCard colors={colors} />
+
+      {/* 가계부 요약은 맨 아래 — 일정·할 일보다 부차적인 정보 */}
+      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>이번 달</Text>
+      <BudgetSummaryCard income={totalIncome} expense={totalExpense} balance={balance} colors={colors} />
     </ScrollView>
   );
 }

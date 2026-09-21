@@ -67,16 +67,44 @@ export default function WeatherScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 에뮬레이터·시뮬레이터에서 GPS가 실패할 수 있으므로 서울 좌표를 fallback으로 사용한다.
+  // 실제 기기에서는 GPS가 정상 동작하므로 fallback이 거의 쓰이지 않는다.
+  const SEOUL_LAT = 37.5665;
+  const SEOUL_LON = 126.9780;
+
+  const [usingFallback, setUsingFallback] = useState(false);
+
   const loadWeather = useCallback(async () => {
     try {
       setError(null);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setError("위치 권한이 필요합니다.\n설정 > 하루 > 위치에서 허용해 주세요.");
-        return;
+      setUsingFallback(false);
+
+      let lat = SEOUL_LAT;
+      let lon = SEOUL_LON;
+      let fallback = false;
+
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          // 3초 내 GPS 응답이 없으면 fallback (에뮬레이터에서 GPS가 무한 대기하는 경우 대비)
+          const loc = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("GPS timeout")), 3000)
+            ),
+          ]);
+          lat = loc.coords.latitude;
+          lon = loc.coords.longitude;
+        } else {
+          fallback = true;
+        }
+      } catch {
+        // GPS 권한 거부·에뮬레이터 GPS 없음·타임아웃 → 서울 좌표로 fallback
+        fallback = true;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const data = await fetchWeather(loc.coords.latitude, loc.coords.longitude);
+
+      setUsingFallback(fallback);
+      const data = await fetchWeather(lat, lon);
       setWeather(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "날씨 정보를 불러오지 못했습니다.");
@@ -123,6 +151,11 @@ export default function WeatherScreen() {
       ListHeaderComponent={
         <>
           <Text style={[styles.screenTitle, { color: colors.text }]}>날씨</Text>
+          {usingFallback && (
+            <Text style={[styles.fallbackNote, { color: colors.subtext }]}>
+              📍 서울 기준 (GPS 사용 불가)
+            </Text>
+          )}
           <Text style={[styles.updateTime, { color: colors.subtext }]}>
             예보 기준 {weather.base_date.slice(0, 4)}.{weather.base_date.slice(4, 6)}.{weather.base_date.slice(6, 8)} {weather.base_time.slice(0, 2)}시
           </Text>
@@ -140,6 +173,7 @@ export default function WeatherScreen() {
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, padding: 24 },
   statusText: { fontSize: 14 },
+  fallbackNote: { fontSize: 12, marginBottom: 2 },
   errorEmoji: { fontSize: 40 },
   errorText: { fontSize: 15, textAlign: "center", lineHeight: 24 },
   retryBtn: { marginTop: 8, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 },

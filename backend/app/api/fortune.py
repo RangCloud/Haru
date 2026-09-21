@@ -12,41 +12,45 @@ from app.services.fortune import get_fortune
 
 router = APIRouter(tags=["운세"])
 
-# 지원하는 별자리 목록 — 입력값 검증에 사용
-_VALID_SIGNS = frozenset({
-    "general",
-    "aries", "taurus", "gemini", "cancer",
-    "leo", "virgo", "libra", "scorpio", "sagittarius",
-    "capricorn", "aquarius", "pisces",
-})
-
 
 @router.get("/fortune", response_model=FortuneResponse)
 async def fortune(
-    sign: str = Query(
-        default="general",
-        description="별자리(영문 소문자) 또는 'general' (전체 운세)",
-    ),
+    birth_year: int | None = Query(default=None, description="태어난 연도 (예: 1990)"),
+    birth_month: int | None = Query(default=None, description="태어난 월 (1~12)"),
+    birth_month_type: str = Query(default="solar", description="양력(solar) 또는 음력(lunar)"),
+    birth_day: int | None = Query(default=None, description="태어난 일 (1~31)"),
+    birth_hour: int | None = Query(default=None, description="태어난 시간 (0~23), 모르면 생략"),
 ):
     """
     오늘의 운세를 반환한다.
 
-    - 하루 1회 Claude 실제 호출 후 캐시 (같은 날 같은 별자리는 cached=True 반환)
+    - 생년월일(시)을 기반으로 개인화된 운세 생성
+    - 하루 1회 Claude 실제 호출 후 캐시 (같은 날 같은 생년월일은 cached=True)
     - 하루 최대 50회 Claude 호출 제한 (레이트 리밋)
     """
-    sign = sign.lower().strip()
-
-    if sign not in _VALID_SIGNS:
+    # 월 유형 검증
+    if birth_month_type not in ("solar", "lunar"):
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"유효하지 않은 별자리: '{sign}'. "
-                f"가능한 값: {', '.join(sorted(_VALID_SIGNS))}"
-            ),
+            detail="birth_month_type은 'solar'(양력) 또는 'lunar'(음력)만 허용합니다.",
         )
 
+    # 생년월일 범위 검증 (제공된 경우)
+    if birth_month is not None and not (1 <= birth_month <= 12):
+        raise HTTPException(status_code=422, detail="birth_month는 1~12 범위여야 합니다.")
+    if birth_day is not None and not (1 <= birth_day <= 31):
+        raise HTTPException(status_code=422, detail="birth_day는 1~31 범위여야 합니다.")
+    if birth_hour is not None and not (0 <= birth_hour <= 23):
+        raise HTTPException(status_code=422, detail="birth_hour는 0~23 범위여야 합니다.")
+
     try:
-        return await get_fortune(sign=sign)
+        return await get_fortune(
+            birth_year=birth_year,
+            birth_month=birth_month,
+            birth_month_type=birth_month_type,
+            birth_day=birth_day,
+            birth_hour=birth_hour,
+        )
     except RuntimeError as e:
         # 레이트 리밋 초과 → 429 Too Many Requests
         raise HTTPException(status_code=429, detail=str(e))
