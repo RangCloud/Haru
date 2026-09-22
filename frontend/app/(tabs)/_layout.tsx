@@ -1,9 +1,11 @@
 /**
  * 하루 앱 탭 레이아웃
- * 5개 탭: 홈 · 일정+가계부 · 날씨 · 운세 · 뉴스
+ * 4개 탭: 홈 · 일정+가계부 · 운세 · 뉴스
  *
- * - budget 탭은 schedule에 통합되어 별도 탭 아이콘을 숨긴다 (href: null)
- * - more 탭도 숨긴다 (뉴스 탭으로 대체)
+ * - 날씨는 홈 탭 헤더 우상단 위젯으로 이전 (weatherStore.ts)
+ * - budget 탭은 schedule에 통합 — href: null 으로 숨긴다
+ * - more 탭은 뉴스 탭으로 대체 — href: null 으로 숨긴다
+ * - weather 탭도 숨긴다 (홈 위젯으로 대체)
  */
 
 import { Tabs } from "expo-router";
@@ -58,15 +60,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="weather"
-        options={{
-          title: "날씨",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="cloud.sun.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="fortune"
         options={{
           title: "운세",
@@ -84,16 +77,10 @@ export default function TabLayout() {
           ),
         }}
       />
-      {/* 가계부는 일정 탭에 통합 — 독립 탭에서는 숨긴다 */}
-      <Tabs.Screen
-        name="budget"
-        options={{ href: null }}
-      />
-      {/* 더보기 탭은 뉴스 탭으로 대체 — 접근 경로 비활성화 */}
-      <Tabs.Screen
-        name="more"
-        options={{ href: null }}
-      />
+      {/* 아래 탭들은 독립 탭으로 노출하지 않음 */}
+      <Tabs.Screen name="budget" options={{ href: null }} />
+      <Tabs.Screen name="more" options={{ href: null }} />
+      <Tabs.Screen name="weather" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -77,10 +77,10 @@ export const useFortuneStore = create<FortuneState>((set, get) => ({
   saveBirthInfo: async (info: BirthInfo) => {
     try {
       await SecureStore.setItemAsync(BIRTH_INFO_KEY, JSON.stringify(info));
-      // 생년월일이 바뀌면 기존 운세 캐시 무효화
-      await SecureStore.deleteItemAsync(FORTUNE_CACHE_KEY);
+      // 캐시는 유지한다 — fetchTodayFortune에서 당일 캐시가 있으면 재사용한다.
+      // (같은 날 생년월일을 바꿔도 이미 운세를 받은 경우 재호출하지 않음)
       set({ birthInfo: info, todayFortune: null, error: null });
-      // 저장 즉시 오늘 운세를 가져온다
+      // 저장 즉시 오늘 운세를 가져온다 (캐시 없으면 API 호출)
       await get().fetchTodayFortune();
     } catch {
       set({ error: "생년월일 저장에 실패했습니다." });
@@ -89,8 +89,10 @@ export const useFortuneStore = create<FortuneState>((set, get) => ({
 
   clearBirthInfo: async () => {
     try {
+      // 생년월일만 삭제한다. 운세 캐시는 유지하여 당일 재요청을 막는다.
+      // FORTUNE_CACHE_KEY를 지우면 새 생년월일 입력 시 당일 운세를 다시 볼 수 있어
+      // 하루 1회 제한이 우회되므로 삭제하지 않는다.
       await SecureStore.deleteItemAsync(BIRTH_INFO_KEY);
-      await SecureStore.deleteItemAsync(FORTUNE_CACHE_KEY);
       set({ birthInfo: null, todayFortune: null, error: null });
     } catch {
       set({ error: "초기화에 실패했습니다." });
@@ -103,8 +105,21 @@ export const useFortuneStore = create<FortuneState>((set, get) => ({
     // 생년월일이 없으면 운세를 가져올 수 없음
     if (!birthInfo) return;
 
-    // 이미 오늘 운세가 있으면 API 재호출 생략 (하루 1회 제한)
+    // state에 이미 오늘 운세가 있으면 API 재호출 생략
     if (todayFortune) return;
+
+    // state에는 없지만 SecureStore 캐시 확인
+    // clearBirthInfo 후 새 생년월일 입력 시 같은 날 재요청을 방지한다
+    try {
+      const cacheRaw = await SecureStore.getItemAsync(FORTUNE_CACHE_KEY);
+      const cache: FortuneCacheEntry | null = cacheRaw ? JSON.parse(cacheRaw) : null;
+      if (cache?.date === todayStr()) {
+        set({ todayFortune: cache.fortune });
+        return;
+      }
+    } catch {
+      // 캐시 읽기 실패 시 무시하고 API 호출로 넘어간다
+    }
 
     set({ isLoading: true, error: null });
     try {

@@ -15,6 +15,7 @@ export interface ScheduleItem {
   date: string;        // YYYY-MM-DD
   time: string;        // HH:MM, 종일이면 ""
   note: string;
+  color: string;       // 일정 색상 hex — 기본값 '#6B6EE7'
   created_at: string;  // ISO 8601
 }
 
@@ -26,9 +27,9 @@ export type NewScheduleItem = Omit<ScheduleItem, "id" | "created_at">;
 export async function addSchedule(s: NewScheduleItem): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync(
-    `INSERT INTO schedules (title, date, time, note, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    [s.title, s.date, s.time, s.note, new Date().toISOString()],
+    `INSERT INTO schedules (title, date, time, note, color, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [s.title, s.date, s.time, s.note, s.color ?? "#6B6EE7", new Date().toISOString()],
   );
   return result.lastInsertRowId;
 }
@@ -82,6 +83,7 @@ export async function updateSchedule(
   if (s.date !== undefined)  { fields.push("date = ?");  values.push(s.date); }
   if (s.time !== undefined)  { fields.push("time = ?");  values.push(s.time); }
   if (s.note !== undefined)  { fields.push("note = ?");  values.push(s.note); }
+  if (s.color !== undefined) { fields.push("color = ?"); values.push(s.color); }
 
   if (fields.length === 0) return;
   values.push(id);

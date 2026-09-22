@@ -18,7 +18,9 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -37,6 +39,20 @@ import {
 import { type ScheduleItem } from "@/src/db/schedule";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
+import { scheduleEventNotification } from "@/src/utils/notifications";
+
+// ── 색상 팔레트 ───────────────────────────────────────────────
+// 일정별 색상 선택 시 제공할 색상 목록
+const SCHEDULE_COLORS = [
+  "#6B6EE7", // 인디고 (기본)
+  "#3B82F6", // 파랑
+  "#0EA5E9", // 하늘
+  "#10B981", // 초록
+  "#F59E0B", // 노랑
+  "#F97316", // 주황
+  "#EF4444", // 빨강
+  "#EC4899", // 분홍
+];
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
@@ -93,7 +109,7 @@ interface CalendarProps {
   year: number;
   month: number;
   selectedDate: string;
-  markedDates: Set<string>;   // 일정 또는 거래가 있는 날짜
+  markedDates: Set<string>;
   colors: (typeof Colors)["light"];
   onSelectDate: (date: string) => void;
 }
@@ -128,7 +144,7 @@ function Calendar({ year, month, selectedDate, markedDates, colors, onSelectDate
           return (
             <TouchableOpacity
               key={dateStr}
-              style={[styles.dayCell, isSelected && { backgroundColor: colors.tint, borderRadius: 22 }]}
+              style={[styles.dayCell, isSelected && { backgroundColor: colors.tint, borderRadius: 24 }]}
               onPress={() => onSelectDate(dateStr)}
               activeOpacity={0.7}
             >
@@ -141,6 +157,10 @@ function Calendar({ year, month, selectedDate, markedDates, colors, onSelectDate
               ]}>
                 {day}
               </Text>
+              {isToday && !isSelected && (
+                // 오늘 날짜 밑줄 강조 (선택 상태가 아닐 때만)
+                <View style={[styles.todayDot, { backgroundColor: colors.tint }]} />
+              )}
               {hasEvent && (
                 <View style={[styles.eventDot, { backgroundColor: isSelected ? "#fff" : colors.tint }]} />
               )}
@@ -152,20 +172,54 @@ function Calendar({ year, month, selectedDate, markedDates, colors, onSelectDate
   );
 }
 
+// ── 색상 선택 칩 ──────────────────────────────────────────────
+
+function ColorPicker({
+  value, onChange, colors,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  colors: (typeof Colors)["light"];
+}) {
+  return (
+    <View style={styles.colorPicker}>
+      {SCHEDULE_COLORS.map((c) => (
+        <TouchableOpacity
+          key={c}
+          style={[
+            styles.colorChip,
+            { backgroundColor: c },
+            value === c && styles.colorChipSelected,
+          ]}
+          onPress={() => onChange(c)}
+          activeOpacity={0.8}
+        >
+          {value === c && <Text style={styles.colorCheckmark}>✓</Text>}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
 // ── 일정 행 ───────────────────────────────────────────────────
 
-function ScheduleRow({ item, colors, onDelete, onEdit }: {
+function ScheduleRow({ item, colors, onDelete, onEdit, onShare }: {
   item: ScheduleItem;
   colors: (typeof Colors)["light"];
   onDelete: () => void;
   onEdit: () => void;
+  onShare: () => void;
 }) {
+  // 일정별 색상 — DB에 없는 경우 기본 tint 색상 사용
+  const barColor = item.color || colors.tint;
+
   return (
     <TouchableOpacity
-      style={[styles.scheduleRow, { borderLeftColor: colors.tint }]}
+      style={[styles.scheduleRow, { borderLeftColor: barColor }]}
       onLongPress={() =>
         Alert.alert("일정 관리", item.title, [
           { text: "취소", style: "cancel" },
+          { text: "공유", onPress: onShare },
           { text: "수정", onPress: onEdit },
           { text: "삭제", style: "destructive", onPress: onDelete },
         ])
@@ -178,7 +232,7 @@ function ScheduleRow({ item, colors, onDelete, onEdit }: {
           <Text style={[styles.scheduleNote, { color: colors.icon }]} numberOfLines={1}>{item.note}</Text>
         ) : null}
       </View>
-      <Text style={[styles.scheduleTime, { color: item.time ? colors.tint : colors.icon }]}>
+      <Text style={[styles.scheduleTime, { color: item.time ? barColor : colors.icon }]}>
         {item.time || "종일"}
       </Text>
     </TouchableOpacity>
@@ -229,8 +283,8 @@ interface ScheduleModalProps {
   visible: boolean;
   initialDate: string;
   onClose: () => void;
-  onAdd: (s: { title: string; date: string; time: string; note: string }) => void;
-  onUpdate: (s: { title: string; date: string; time: string; note: string }) => void;
+  onAdd: (s: { title: string; date: string; time: string; note: string; color: string }) => void;
+  onUpdate: (s: { title: string; date: string; time: string; note: string; color: string }) => void;
   colors: (typeof Colors)["light"];
   initialData?: ScheduleItem;
 }
@@ -240,15 +294,20 @@ function ScheduleModal({ visible, initialDate, onClose, onAdd, onUpdate, colors,
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState("");
   const [note, setNote] = useState("");
+  const [color, setColor] = useState(SCHEDULE_COLORS[0]);
   const isEdit = !!initialData;
 
   useEffect(() => {
     if (!visible) return;
     if (initialData) {
-      setTitle(initialData.title); setDate(initialData.date);
-      setTime(initialData.time); setNote(initialData.note);
+      setTitle(initialData.title);
+      setDate(initialData.date);
+      setTime(initialData.time);
+      setNote(initialData.note);
+      setColor(initialData.color || SCHEDULE_COLORS[0]);
     } else {
       setTitle(""); setDate(initialDate); setTime(""); setNote("");
+      setColor(SCHEDULE_COLORS[0]);
     }
   }, [visible, initialDate, initialData]);
 
@@ -260,39 +319,53 @@ function ScheduleModal({ visible, initialDate, onClose, onAdd, onUpdate, colors,
       const [h, m] = time.split(":").map(Number);
       if (h > 23 || m > 59) { Alert.alert("입력 오류", "올바른 시간을 입력해 주세요.\n시(0-23), 분(0-59)"); return; }
     }
-    const data = { title: title.trim(), date, time, note: note.trim() };
+    const data = { title: title.trim(), date, time, note: note.trim(), color };
     if (isEdit) onUpdate(data); else onAdd(data);
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <View style={[styles.modalSheet, { backgroundColor: colors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "일정 수정" : "일정 추가"}</Text>
-            <TouchableOpacity onPress={onClose}><Text style={[styles.modalClose, { color: colors.icon }]}>✕</Text></TouchableOpacity>
-          </View>
-          <Text style={[styles.fieldLabel, { color: colors.icon }]}>제목 *</Text>
-          <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-            placeholder="일정 제목" placeholderTextColor={colors.icon}
-            value={title} onChangeText={setTitle} autoFocus={!isEdit} />
-          <Text style={[styles.fieldLabel, { color: colors.icon }]}>날짜</Text>
-          <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-            placeholder="YYYY-MM-DD" placeholderTextColor={colors.icon}
-            keyboardType="number-pad" value={date} onChangeText={(t) => setDate(autoFormatDate(t))} />
-          <Text style={[styles.fieldLabel, { color: colors.icon }]}>시간 (선택 — 비우면 종일)</Text>
-          <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-            placeholder="HH:MM  예) 14:30" placeholderTextColor={colors.icon}
-            keyboardType="number-pad" value={time} onChangeText={(t) => setTime(autoFormatTime(t))} />
-          <Text style={[styles.fieldLabel, { color: colors.icon }]}>메모 (선택)</Text>
-          <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-            placeholder="메모" placeholderTextColor={colors.icon}
-            value={note} onChangeText={setNote} />
-          <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.tint }]} onPress={handleSubmit}>
-            <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+      {/* backdrop 탭으로 모달 닫기 */}
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <KeyboardAvoidingView
+          style={styles.modalAvoidView}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          {/* 내용 영역은 탭해도 닫히지 않도록 전파 차단 */}
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalSheet, { backgroundColor: colors.background }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "일정 수정" : "일정 추가"}</Text>
+                <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Text style={[styles.modalClose, { color: colors.icon }]}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.fieldLabel, { color: colors.icon }]}>제목 *</Text>
+              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
+                placeholder="일정 제목" placeholderTextColor={colors.icon}
+                value={title} onChangeText={setTitle} autoFocus={!isEdit} />
+              <Text style={[styles.fieldLabel, { color: colors.icon }]}>날짜</Text>
+              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
+                placeholder="YYYY-MM-DD" placeholderTextColor={colors.icon}
+                keyboardType="number-pad" value={date} onChangeText={(t) => setDate(autoFormatDate(t))} />
+              <Text style={[styles.fieldLabel, { color: colors.icon }]}>시간 (선택 — 비우면 종일)</Text>
+              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
+                placeholder="HH:MM  예) 14:30" placeholderTextColor={colors.icon}
+                keyboardType="number-pad" value={time} onChangeText={(t) => setTime(autoFormatTime(t))} />
+              <Text style={[styles.fieldLabel, { color: colors.icon }]}>메모 (선택)</Text>
+              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
+                placeholder="메모" placeholderTextColor={colors.icon}
+                value={note} onChangeText={setNote} />
+              {/* 색상 선택 */}
+              <Text style={[styles.fieldLabel, { color: colors.icon }]}>색상</Text>
+              <ColorPicker value={color} onChange={setColor} colors={colors} />
+              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: color }]} onPress={handleSubmit}>
+                <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Pressable>
     </Modal>
   );
 }
@@ -354,69 +427,82 @@ function BudgetModal({ visible, initialDate, initialType = "expense", onClose, o
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={[styles.modalSheet, { backgroundColor: colors.card }]} keyboardShouldPersistTaps="handled">
-          <View style={styles.modalHandle} />
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "거래 수정" : "거래 추가"}</Text>
-            <TouchableOpacity onPress={onClose}><Text style={[styles.modalClose, { color: colors.subtext }]}>✕</Text></TouchableOpacity>
-          </View>
+      {/* backdrop 탭으로 닫기 */}
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <KeyboardAvoidingView
+          style={styles.modalAvoidView}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <ScrollView
+              contentContainerStyle={[styles.modalSheet, { backgroundColor: colors.card }]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "거래 수정" : "거래 추가"}</Text>
+                <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Text style={[styles.modalClose, { color: colors.subtext }]}>✕</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* 수입/지출 토글 */}
-          <View style={[styles.typeToggle, { backgroundColor: colors.background }]}>
-            {(["expense", "income"] as const).map((t) => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.typeBtn, type === t && { backgroundColor: t === "expense" ? colors.expense : colors.income }]}
-                onPress={() => switchType(t)}
-              >
-                <Text style={[styles.typeBtnText, { color: type === t ? "#fff" : colors.subtext }]}>
-                  {t === "expense" ? "지출" : "수입"}
-                </Text>
+              {/* 수입/지출 토글 */}
+              <View style={[styles.typeToggle, { backgroundColor: colors.background }]}>
+                {(["expense", "income"] as const).map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeBtn, type === t && { backgroundColor: t === "expense" ? colors.expense : colors.income }]}
+                    onPress={() => switchType(t)}
+                  >
+                    <Text style={[styles.typeBtnText, { color: type === t ? "#fff" : colors.subtext }]}>
+                      {t === "expense" ? "지출" : "수입"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>금액</Text>
+              <TextInput
+                style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
+                placeholder="금액 입력 (원)" placeholderTextColor={colors.subtext}
+                keyboardType="number-pad" value={amount} onChangeText={handleAmountChange} autoFocus={!isEdit}
+              />
+
+              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>카테고리</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryList}>
+                {categories.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.categoryChip, { borderColor: colors.separator, backgroundColor: colors.background },
+                      category === c && { backgroundColor: colors.tint, borderColor: colors.tint }]}
+                    onPress={() => setCategory(c)}
+                  >
+                    <Text style={[styles.categoryText, { color: category === c ? "#fff" : colors.subtext }]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>날짜</Text>
+              <TextInput
+                style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
+                placeholder="YYYY-MM-DD" placeholderTextColor={colors.subtext}
+                keyboardType="number-pad" value={date} onChangeText={(t) => setDate(autoFormatDate(t))}
+              />
+
+              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
+              <TextInput
+                style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
+                placeholder="메모" placeholderTextColor={colors.subtext}
+                value={note} onChangeText={setNote}
+              />
+
+              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.tint }]} onPress={handleSubmit}>
+                <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>금액</Text>
-          <TextInput
-            style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
-            placeholder="금액 입력 (원)" placeholderTextColor={colors.subtext}
-            keyboardType="number-pad" value={amount} onChangeText={handleAmountChange} autoFocus={!isEdit}
-          />
-
-          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>카테고리</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryList}>
-            {categories.map((c) => (
-              <TouchableOpacity
-                key={c}
-                style={[styles.categoryChip, { borderColor: colors.separator, backgroundColor: colors.background },
-                  category === c && { backgroundColor: colors.tint, borderColor: colors.tint }]}
-                onPress={() => setCategory(c)}
-              >
-                <Text style={[styles.categoryText, { color: category === c ? "#fff" : colors.subtext }]}>{c}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>날짜</Text>
-          <TextInput
-            style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
-            placeholder="YYYY-MM-DD" placeholderTextColor={colors.subtext}
-            keyboardType="number-pad" value={date} onChangeText={(t) => setDate(autoFormatDate(t))}
-          />
-
-          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
-          <TextInput
-            style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
-            placeholder="메모" placeholderTextColor={colors.subtext}
-            value={note} onChangeText={setNote}
-          />
-
-          <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.tint }]} onPress={handleSubmit}>
-            <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            </ScrollView>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Pressable>
     </Modal>
   );
 }
@@ -487,6 +573,16 @@ export default function ScheduleScreen() {
     ]);
   };
 
+  // 일정 공유 — React Native Share.share()로 텍스트 공유
+  const handleShareSchedule = useCallback((item: ScheduleItem) => {
+    const timeStr = item.time ? ` ${item.time}` : " (종일)";
+    const noteStr = item.note ? `\n메모: ${item.note}` : "";
+    Share.share({
+      title: item.title,
+      message: `📅 ${item.title}\n날짜: ${item.date}${timeStr}${noteStr}`,
+    }).catch(() => {});
+  }, []);
+
   const selectedDateLabel = (() => {
     const d = parseDate(selectedDate);
     const weekday = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
@@ -501,13 +597,13 @@ export default function ScheduleScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      {/* 월 선택 헤더 */}
+      {/* 월 선택 헤더 — 터치 영역을 충분히 확보해 달력 넘김을 쉽게 */}
       <View style={styles.monthHeader}>
-        <TouchableOpacity onPress={prevMonth} style={styles.monthArrow}>
+        <TouchableOpacity onPress={prevMonth} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>‹</Text>
         </TouchableOpacity>
         <Text style={[styles.monthLabel, { color: colors.text }]}>{year}년 {month}월</Text>
-        <TouchableOpacity onPress={nextMonth} style={styles.monthArrow}>
+        <TouchableOpacity onPress={nextMonth} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>›</Text>
         </TouchableOpacity>
       </View>
@@ -552,6 +648,7 @@ export default function ScheduleScreen() {
                   item={s} colors={colors}
                   onDelete={() => removeSchedule(s.id)}
                   onEdit={() => { setEditSchedule(s); setScheduleModalVisible(true); }}
+                  onShare={() => handleShareSchedule(s)}
                 />
               );
             }
@@ -566,7 +663,7 @@ export default function ScheduleScreen() {
           }}
           ListFooterComponent={() =>
             totalCount > 0
-              ? <Text style={[styles.hintText, { color: colors.icon }]}>항목을 길게 눌러 수정·삭제</Text>
+              ? <Text style={[styles.hintText, { color: colors.icon }]}>항목을 길게 눌러 수정·삭제·공유</Text>
               : null
           }
         />
@@ -582,8 +679,21 @@ export default function ScheduleScreen() {
         visible={scheduleModalVisible}
         initialDate={selectedDate}
         onClose={() => { setScheduleModalVisible(false); setEditSchedule(undefined); }}
-        onAdd={async (s) => { setScheduleModalVisible(false); await addSchedule(s); }}
-        onUpdate={async (s) => { setScheduleModalVisible(false); if (editSchedule) await updateSchedule(editSchedule.id, s); setEditSchedule(undefined); }}
+        onAdd={async (s) => {
+          setScheduleModalVisible(false);
+          await addSchedule(s);
+          // 시간이 있는 일정은 10분 전 알림을 예약한다
+          if (s.time) {
+            await scheduleEventNotification(s.title, s.date, s.time);
+          }
+        }}
+        onUpdate={async (s) => {
+          setScheduleModalVisible(false);
+          if (editSchedule) {
+            await updateSchedule(editSchedule.id, s);
+          }
+          setEditSchedule(undefined);
+        }}
         colors={colors}
         initialData={editSchedule}
       />
@@ -606,7 +716,9 @@ export default function ScheduleScreen() {
 // ── 스타일 ───────────────────────────────────────────────────
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CELL_SIZE = Math.floor((SCREEN_WIDTH - 24) / 7);
+// 셀 너비는 7등분, 높이는 너비보다 살짝 크게 → 터치 영역 확보 + 가독성 개선
+const CELL_W = Math.floor((SCREEN_WIDTH - 24) / 7);
+const CELL_H = Math.floor(CELL_W * 1.15);
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
@@ -614,17 +726,37 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     paddingTop: 64, paddingHorizontal: 24, paddingBottom: 8, gap: 16,
   },
-  monthArrow: { padding: 8 },
-  monthArrowText: { fontSize: 28, fontWeight: "300" },
+  // 화살표 터치 영역을 충분히 확보 (hitSlop 별도 설정)
+  monthArrow: { padding: 12 },
+  monthArrowText: { fontSize: 32, fontWeight: "300" },
   monthLabel: { fontSize: 20, fontWeight: "700", minWidth: 110, textAlign: "center" },
   // ── 달력 ──────────────────────────────────────────────────
   calendar: { paddingHorizontal: 12, marginBottom: 4 },
   weekdayRow: { flexDirection: "row", marginBottom: 4 },
-  weekdayText: { width: CELL_SIZE, textAlign: "center", fontSize: 12, fontWeight: "600" },
+  weekdayText: { width: CELL_W, textAlign: "center", fontSize: 12, fontWeight: "600" },
   daysGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: CELL_SIZE, height: CELL_SIZE, alignItems: "center", justifyContent: "center" },
-  dayText: { fontSize: 14 },
-  eventDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
+  // 셀 높이를 너비보다 크게 해 날짜 숫자 + 도트가 여유롭게 배치된다
+  dayCell: { width: CELL_W, height: CELL_H, alignItems: "center", justifyContent: "center" },
+  dayText: { fontSize: 15 },
+  // 오늘 날짜 밑줄 표시 (선택 상태 외)
+  todayDot: { width: 4, height: 4, borderRadius: 2, marginTop: 1 },
+  eventDot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 2 },
+  // ── 색상 선택 ─────────────────────────────────────────────
+  colorPicker: { flexDirection: "row", gap: 10, marginBottom: 4, flexWrap: "wrap" },
+  colorChip: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: "center", justifyContent: "center",
+  },
+  colorChipSelected: {
+    borderWidth: 2.5,
+    borderColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  colorCheckmark: { color: "#fff", fontSize: 14, fontWeight: "700" },
   // ── 선택일 헤더 ───────────────────────────────────────────
   selectedDateBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
@@ -670,7 +802,13 @@ const styles = StyleSheet.create({
   fabText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   hintText: { fontSize: 11, textAlign: "center", paddingTop: 8, paddingBottom: 90 },
   // ── 모달 공통 ─────────────────────────────────────────────
-  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "#00000060" },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "#00000060",
+  },
+  // KeyboardAvoidingView는 flex: 없이 자연스럽게 시트 높이만 차지
+  modalAvoidView: { justifyContent: "flex-end" },
   modalSheet: {
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 24, paddingBottom: 40, gap: 8,
