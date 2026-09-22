@@ -14,3 +14,9 @@ local.properties
 
 # Bundle artifacts
 *.jsbundle
+
+# 서명 키 — 절대 커밋 금지
+# debug.keystore: 디버그 빌드용. EAS Build가 자동 생성하므로 불필요.
+# release.keystore: 리테일 서명키는 특히 커밋 금지.
+*.keystore
+*.jks

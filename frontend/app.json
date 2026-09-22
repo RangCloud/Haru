@@ -66,6 +66,7 @@
           "sounds": []
         }
       ],
+      "./plugins/withHaruWidget",
       [
         "expo-build-properties",
         {

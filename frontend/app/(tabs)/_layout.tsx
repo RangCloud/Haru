@@ -1,6 +1,6 @@
 /**
  * 하루 앱 탭 레이아웃
- * 4개 탭: 홈 · 일정+가계부 · 운세 · 뉴스
+ * 5개 탭: 홈 · 일정+가계부 · 운세 · 뉴스 · 소셜
  *
  * - 날씨는 홈 탭 헤더 우상단 위젯으로 이전 (weatherStore.ts)
  * - budget 탭은 schedule에 통합 — href: null 으로 숨긴다
@@ -74,6 +74,15 @@ export default function TabLayout() {
           title: "뉴스",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={24} name="newspaper.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="social"
+        options={{
+          title: "친구",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={24} name="person.2.fill" color={color} />
           ),
         }}
       />

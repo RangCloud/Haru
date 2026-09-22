@@ -13,14 +13,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import fortune, news, weather
+from app.api import fortune, news, weather, social
 from app.core.config import settings
+from app.db.database import init_db
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """앱 시작·종료 시 실행할 코드를 여기에 둔다 (DB 연결, 캐시 초기화 등)."""
-    # 시작 시 — 현재는 별도 초기화 없음
+    """앱 시작·종료 시 실행할 코드를 여기에 둔다."""
+    # DB 테이블 자동 생성 (이미 있으면 무시)
+    await init_db()
     yield
     # 종료 시 — 필요하면 리소스 정리
 
@@ -52,6 +54,7 @@ app.add_middleware(
 app.include_router(weather.router, prefix="/api")
 app.include_router(news.router, prefix="/api")
 app.include_router(fortune.router, prefix="/api")
+app.include_router(social.router, prefix="/api")
 
 
 @app.get("/health", tags=["시스템"])
