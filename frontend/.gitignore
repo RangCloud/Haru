@@ -33,6 +33,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# EAS 설정 — Apple Team ID 등 민감 정보 포함
+eas.json
+
 # typescript
 *.tsbuildinfo
 

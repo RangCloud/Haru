@@ -18,7 +18,10 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "ios": {
+        "developmentTeam": "여기에_APPLE_TEAM_ID_입력"
+      }
     }
   },
   "submit": {
