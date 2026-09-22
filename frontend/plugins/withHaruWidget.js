@@ -15,7 +15,7 @@
  *   "plugins": [ ..., "./plugins/withHaruWidget" ]
  */
 
-const { withXcodeProject, withEntitlementsPlist } = require('@expo/config-plugins');
+const { withXcodeProject, withEntitlementsPlist, withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -206,7 +206,46 @@ function withHaruWidget(config) {
     return mod;
   });
 
-  // 2) Xcode 프로젝트에 위젯 Extension 타겟 추가
+  // 2) Podfile에 리소스 번들 서명 우회 훅 추가
+  //    Xcode 14부터 CocoaPods 리소스 번들 타겟에도 서명이 요구된다.
+  //    post_install 훅으로 번들 타겟의 CODE_SIGNING_ALLOWED를 NO로 설정해 우회한다.
+  config = withDangerousMod(config, [
+    'ios',
+    (mod) => {
+      const podfilePath = require('path').join(
+        mod.modRequest.platformProjectRoot,
+        'Podfile',
+      );
+      if (fs.existsSync(podfilePath)) {
+        let podfile = fs.readFileSync(podfilePath, 'utf8');
+        const FIX_MARKER = '# [withHaruWidget] Xcode14 resource bundle signing fix';
+        if (!podfile.includes(FIX_MARKER)) {
+          const hook = `\n  ${FIX_MARKER}\n` +
+            `  installer.pods_project.targets.each do |target|\n` +
+            `    if target.respond_to?(:product_type) && target.product_type == "com.apple.product-type.bundle"\n` +
+            `      target.build_configurations.each do |cfg|\n` +
+            `        cfg.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'\n` +
+            `      end\n` +
+            `    end\n` +
+            `  end\n`;
+          // post_install 블록이 있으면 그 안에 삽입, 없으면 블록 자체를 추가
+          if (podfile.includes('post_install do |installer|')) {
+            podfile = podfile.replace(
+              'post_install do |installer|',
+              `post_install do |installer|${hook}`,
+            );
+          } else {
+            podfile += `\npost_install do |installer|${hook}end\n`;
+          }
+          fs.writeFileSync(podfilePath, podfile, 'utf8');
+          console.log('[withHaruWidget] Podfile 리소스 번들 서명 우회 훅 추가 완료');
+        }
+      }
+      return mod;
+    },
+  ]);
+
+  // 3) Xcode 프로젝트에 위젯 Extension 타겟 추가
   config = withXcodeProject(config, (mod) => {
     const xcodeProject = mod.modResults;
     const platformProjectRoot = mod.modRequest.platformProjectRoot; // .../ios/
