@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    하루 위젯 레이아웃 (4×2 셀)
+    RemoteViews 제약: RecyclerView 등 복잡한 View는 사용 불가.
+    LinearLayout, TextView, ImageView, Button 등 기본 뷰만 허용.
+    색상은 하드코딩 — 위젯은 앱 테마를 상속받지 않는다.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@drawable/widget_background"
+    android:gravity="start|top">
+
+    <!-- 상단: 날짜 + 날씨 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- 날짜 (예: "9월 22일 (월)") -->
+        <TextView
+            android:id="@+id/widget_date"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="하루"
+            android:textSize="13sp"
+            android:textColor="#FF1A1A2E"
+            android:textStyle="bold"
+            android:maxLines="1" />
+
+        <!-- 날씨 (예: "☀️ 24°") -->
+        <TextView
+            android:id="@+id/widget_weather"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="#FF6B6EE7"
+            android:maxLines="1" />
+
+    </LinearLayout>
+
+    <!-- 구분선 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="6dp"
+        android:background="#266B6EE7" />
+
+    <!-- 일정 라인 1 -->
+    <TextView
+        android:id="@+id/widget_schedule1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="11sp"
+        android:textColor="#CC1A1A2E"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginBottom="3dp" />
+
+    <!-- 일정 라인 2 -->
+    <TextView
+        android:id="@+id/widget_schedule2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="11sp"
+        android:textColor="#CC1A1A2E"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginBottom="3dp" />
+
+    <!-- 일정 라인 3 -->
+    <TextView
+        android:id="@+id/widget_schedule3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="11sp"
+        android:textColor="#CC1A1A2E"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+</LinearLayout>

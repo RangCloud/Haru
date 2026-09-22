@@ -12,6 +12,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.rangcloud.haru",
       "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.rangcloud.haru"]
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "현재 위치의 날씨를 보여주기 위해 위치 정보가 필요합니다.",
         "ITSAppUsesNonExemptEncryption": false

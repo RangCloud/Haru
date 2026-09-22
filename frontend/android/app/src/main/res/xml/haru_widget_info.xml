@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    위젯 메타데이터 설정 파일
+    - targetCellWidth/Height: Android 12+ 그리드 기준 (4열 × 2행)
+    - minWidth/minHeight: Android 11 이하 호환 크기 (dp)
+    - updatePeriodMillis: 시스템 주기 갱신 간격 (30분 = 1800000ms)
+      OS 제한으로 최소값은 30분이며, 앱 실행 시 브로드캐스트로 즉시 갱신한다.
+    - resizeMode: 사용자가 위젯 크기 조절 가능
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:previewImage="@mipmap/ic_launcher"
+    android:initialLayout="@layout/haru_widget"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/app_name" />

@@ -14,9 +14,15 @@ frontend/expo-env.d.ts
 # ── 환경 변수 (민감 정보 — 절대 커밋 금지) ───────────────────
 frontend/.env*.local
 
-# ── Expo / EAS 네이티브 생성 파일 (prebuild 로 언제든 재생성 가능) ──
-frontend/android/
-frontend/ios/
+# ── Expo / EAS 네이티브 파일 ──────────────────────────────────
+# bare workflow 전환 후 android/, ios/ 는 커밋 대상.
+# 빌드 산출물·개인 설정만 제외.
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/ios/build/
+frontend/ios/Pods/
 
 # ── 인증서 / 키파일 ──────────────────────────────────────────
 *.jks

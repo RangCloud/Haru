@@ -38,6 +38,16 @@ yarn-error.*
 
 app-example
 
-# generated native folders
-/ios
-/android
+# prebuild 전: 생성된 native 폴더 제외
+# bare workflow 전환 후 아래 주석 처리됨 (커밋 대상에 포함)
+# /ios
+# /android
+
+# 빌드 산출물만 제외
+/android/build/
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/ios/build/
+/ios/Pods/
+/ios/*.xcworkspace/xcuserdata/
