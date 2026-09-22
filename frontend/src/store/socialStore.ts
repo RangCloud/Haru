@@ -30,7 +30,7 @@ import {
   apiShareSchedule,
   apiToggleLike,
   ShareScheduleRequest,
-} from "@/api/social";
+} from "@/src/api/social";
 
 const TOKEN_KEY = "haru_social_token";
 const PROFILE_KEY = "haru_social_profile";

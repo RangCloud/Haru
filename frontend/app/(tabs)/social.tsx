@@ -29,8 +29,8 @@ import {
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { FriendItem, SharedScheduleItem } from "@/api/social";
-import { useSocialStore } from "@/store/socialStore";
+import { FriendItem, SharedScheduleItem } from "@/src/api/social";
+import { useSocialStore } from "@/src/store/socialStore";
 
 export default function SocialScreen() {
   const scheme = useColorScheme();
