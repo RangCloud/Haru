@@ -28,6 +28,7 @@ import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
 import { requestNotificationPermission } from "@/src/utils/notifications";
+import { writeWidgetData } from "@/src/utils/widgetData";
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
@@ -383,6 +384,25 @@ export default function HomeScreen() {
 
   const today = todayString();
   const todaySchedules = monthSchedules.filter((s) => s.date === today);
+
+  // 위젯 데이터 갱신 — 일정이나 날씨가 바뀔 때마다 파일에 기록
+  const { current: weatherCurrent, usingFallback } = useWeatherStore();
+  useEffect(() => {
+    const SKY: Record<string, string> = { 맑음: "☀️", 구름조금: "🌤️", 구름많음: "⛅", 흐림: "☁️" };
+    const RAIN: Record<string, string> = { 없음: "", 비: "🌧️", "비/눈": "🌨️", 눈: "❄️", 소나기: "⛈️" };
+    writeWidgetData({
+      date: today,
+      schedules: todaySchedules.map((s) => ({ id: s.id, title: s.title, time: s.time, color: s.color ?? "#6B6EE7" })),
+      weather: weatherCurrent
+        ? {
+            icon: weatherCurrent.rain_type !== "없음" ? (RAIN[weatherCurrent.rain_type] ?? "🌧️") : (SKY[weatherCurrent.sky] ?? "🌤️"),
+            temp: weatherCurrent.temp,
+            city: usingFallback ? "서울" : "현재위치",
+          }
+        : null,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [today, todaySchedules, weatherCurrent, usingFallback]);
 
   return (
     <ScrollView
