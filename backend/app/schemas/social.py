@@ -22,8 +22,12 @@ class UserRegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v) < 6:
-            raise ValueError("비밀번호는 6자 이상이어야 합니다.")
+        # 8자 미만 → 브루트포스 비용이 너무 낮다
+        if len(v) < 8:
+            raise ValueError("비밀번호는 8자 이상이어야 합니다.")
+        # 숫자 또는 특수문자 필수 — 순수 영문 단어 사전 공격 차단
+        if not re.search(r"[0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", v):
+            raise ValueError("비밀번호에 숫자 또는 특수문자(!@#$% 등)를 포함해야 합니다.")
         return v
 
 

@@ -46,7 +46,9 @@ async def init_db() -> None:
             CREATE TABLE IF NOT EXISTS auth_tokens (
                 token      TEXT PRIMARY KEY,
                 user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                -- expires_at: UTC ISO-8601. NULL은 레거시 행(만료 없음)으로 허용
+                expires_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS friendships (
@@ -87,3 +89,12 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_likes_schedule   ON schedule_likes(schedule_id);
         """)
         await db.commit()
+
+        # ── 기존 DB 마이그레이션: expires_at 컬럼 추가 ─────────────
+        # 이미 컬럼이 있으면 SQLite가 "duplicate column name" 오류를 낸다.
+        # try/except로 무시해 멱등적으로 처리한다.
+        try:
+            await db.execute("ALTER TABLE auth_tokens ADD COLUMN expires_at TEXT")
+            await db.commit()
+        except Exception:
+            pass  # 이미 컬럼 존재 — 무시

@@ -6,7 +6,11 @@ DB 접근은 aiosqlite.Connection을 받아 처리하고 트랜잭션은 호출�
 """
 
 import hashlib
+import hmac
 import secrets
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 import aiosqlite
 
 from app.schemas.social import (
@@ -17,21 +21,81 @@ from app.schemas.social import (
 )
 
 
-# ── 패스워드 유틸 ─────────────────────────────────────────────────
+# ── 패스워드 해싱 (PBKDF2 + 사용자별 랜덤 salt) ────────────────────
+# SHA256 + 고정 salt 방식은 레인보우 테이블 공격에 취약하다.
+# PBKDF2-SHA256: 사용자마다 다른 랜덤 salt를 생성하고 260,000회 반복(OWASP 권장)해
+# GPU 병렬 크랙 비용을 수천 배 높인다. Python 표준 라이브러리만 사용.
+#
+# 저장 형식: "pbkdf2:<salt_hex>:<hash_hex>"
+
+_PBKDF2_ITERATIONS = 260_000
+
 
 def hash_password(password: str) -> str:
-    """sha256 + salt 방식으로 비밀번호를 해시한다.
-    프로덕션에서는 bcrypt/argon2를 권장하지만 MVP 단계에서는 이것으로 충분하다."""
-    salt = "haru_salt_2025"   # 실제 배포 시 .env로 외부화할 것
-    return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    """PBKDF2-SHA256 + 랜덤 salt로 비밀번호를 해시한다."""
+    salt = secrets.token_hex(16)          # 사용자마다 고유한 32자 16진수 salt
+    h = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        _PBKDF2_ITERATIONS,
+    )
+    return f"pbkdf2:{salt}:{h.hex()}"
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return hash_password(plain) == hashed
+def verify_password(plain: str, stored: str) -> bool:
+    """저장된 PBKDF2 해시와 입력 비밀번호를 상수 시간 비교한다.
+    타이밍 공격 방지를 위해 hmac.compare_digest 사용."""
+    try:
+        _, salt, expected_hex = stored.split(":")
+        h = hashlib.pbkdf2_hmac(
+            "sha256",
+            plain.encode("utf-8"),
+            salt.encode("utf-8"),
+            _PBKDF2_ITERATIONS,
+        )
+        # 타이밍 공격 방지: 길이가 달라도 상수 시간에 비교
+        return hmac.compare_digest(h.hex(), expected_hex)
+    except (ValueError, AttributeError):
+        return False
 
 
-def generate_token() -> str:
-    return secrets.token_hex(32)
+# ── 토큰 생성 · 만료 ──────────────────────────────────────────────
+# 토큰 만료 없이 영구 유효하면 탈취 시 대응 수단이 없다.
+# 30일 후 만료 → 이후 재로그인 필요.
+
+_TOKEN_TTL_DAYS = 30
+
+
+def generate_token() -> tuple[str, str]:
+    """(token, expires_at_iso) 쌍을 반환한다.
+    expires_at은 UTC ISO-8601 문자열로 DB에 저장한다."""
+    token = secrets.token_hex(32)   # 256비트 엔트로피
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=_TOKEN_TTL_DAYS)
+    ).isoformat()
+    return token, expires_at
+
+
+# ── 로그인 rate limiting (메모리 기반) ────────────────────────────
+# 서버 재시작 시 초기화되지만 일반적인 무차별 대입을 막기에 충분하다.
+# 이메일 단위로 5분 내 10회 초과 시 차단.
+
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_RATE_WINDOW_SEC = 300   # 5분
+_RATE_MAX_TRIES  = 10    # 10회
+
+
+def _check_login_rate(email: str) -> None:
+    """이메일별 로그인 시도를 검사한다. 초과 시 ValueError."""
+    now = time.monotonic()
+    cutoff = now - _RATE_WINDOW_SEC
+    attempts = _login_attempts[email]
+    # 윈도우 밖 시도 제거
+    _login_attempts[email] = [t for t in attempts if t > cutoff]
+    if len(_login_attempts[email]) >= _RATE_MAX_TRIES:
+        raise ValueError("로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
+    _login_attempts[email].append(now)
 
 
 # ── 인증 ─────────────────────────────────────────────────────────
@@ -63,6 +127,9 @@ async def login_user(
 ) -> tuple[str, int, str]:
     """이메일·비밀번호 검증 후 토큰을 발급한다.
     반환: (token, user_id, nickname)"""
+    # rate limit 먼저 검사 — 비밀번호 확인 전에 차단해야 타이밍 정보 누출을 막는다
+    _check_login_rate(email)
+
     row = await (
         await db.execute(
             "SELECT id, nickname, password_hash FROM users WHERE email = ?", (email,)
@@ -72,10 +139,10 @@ async def login_user(
     if not row or not verify_password(password, row["password_hash"]):
         raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다.")
 
-    token = generate_token()
+    token, expires_at = generate_token()
     await db.execute(
-        "INSERT INTO auth_tokens (token, user_id) VALUES (?, ?)",
-        (token, row["id"]),
+        "INSERT INTO auth_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+        (token, row["id"], expires_at),
     )
     await db.commit()
     return token, row["id"], row["nickname"]
@@ -85,10 +152,10 @@ async def get_user_by_token(
     db: aiosqlite.Connection,
     token: str,
 ) -> UserProfile | None:
-    """토큰으로 사용자를 조회한다. 유효하지 않으면 None."""
+    """토큰으로 사용자를 조회한다. 만료됐거나 유효하지 않으면 None."""
     row = await (
         await db.execute(
-            """SELECT u.id, u.nickname, u.email
+            """SELECT u.id, u.nickname, u.email, t.expires_at
                FROM auth_tokens t JOIN users u ON t.user_id = u.id
                WHERE t.token = ?""",
             (token,),
@@ -96,6 +163,16 @@ async def get_user_by_token(
     ).fetchone()
     if not row:
         return None
+
+    # 토큰 만료 확인 — expires_at이 없는 기존 토큰은 그대로 허용(마이그레이션 호환)
+    if row["expires_at"]:
+        try:
+            exp = datetime.fromisoformat(row["expires_at"])
+            if exp < datetime.now(timezone.utc):
+                return None  # 만료된 토큰
+        except (ValueError, TypeError):
+            pass  # 파싱 실패 시 허용 (레거시 행)
+
     return UserProfile(id=row["id"], nickname=row["nickname"], email=row["email"])
 
 
