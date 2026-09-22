@@ -138,30 +138,41 @@ function addWidgetTargetToProject(xcodeProject, platformProjectRoot, mainTargetN
   );
 
   // ── 6) 위젯 타겟의 빌드 설정 구성 ───────────────────────────
-  // addTarget이 생성한 XCBuildConfiguration에 위젯에 필요한 설정 추가
-  ['Debug', 'Release'].forEach((buildConfig) => {
-    xcodeProject.addBuildProperty(
-      'IPHONEOS_DEPLOYMENT_TARGET', DEPLOY_TARGET,
-      buildConfig
-    );
-    xcodeProject.addBuildProperty('SWIFT_VERSION', SWIFT_VERSION, buildConfig);
-    xcodeProject.addBuildProperty(
-      'PRODUCT_BUNDLE_IDENTIFIER', WIDGET_BUNDLE,
-      buildConfig
-    );
-    xcodeProject.addBuildProperty('SKIP_INSTALL', 'YES', buildConfig);
-    xcodeProject.addBuildProperty('SWIFT_EMIT_LOC_STRINGS', 'YES', buildConfig);
-    xcodeProject.addBuildProperty(
-      'INFOPLIST_FILE',
-      `${WIDGET_NAME}/Info.plist`,
-      buildConfig
-    );
-    xcodeProject.addBuildProperty(
-      'CODE_SIGN_ENTITLEMENTS',
-      `${WIDGET_NAME}/${WIDGET_NAME}.entitlements`,
-      buildConfig
-    );
-  });
+  // Xcode 14부터 Extension 타겟도 DEVELOPMENT_TEAM을 명시해야 한다.
+  // EAS Secret(APPLE_TEAM_ID)에서 팀 ID를 읽어 빌드 설정에 주입한다.
+  const teamId = process.env.APPLE_TEAM_ID || '';
+
+  // 위젯 타겟의 빌드 구성 UUID 목록을 추출해 해당 타겟에만 설정 적용
+  const nativeTargets = xcodeProject.pbxNativeTargetSection();
+  let widgetConfigListUuid;
+  for (const target of Object.values(nativeTargets)) {
+    if (target && typeof target === 'object' && target.name === WIDGET_NAME) {
+      widgetConfigListUuid = target.buildConfigurationList;
+      break;
+    }
+  }
+
+  if (widgetConfigListUuid) {
+    const configLists = xcodeProject.pbxXCConfigurationListSection();
+    const widgetConfigList = configLists[widgetConfigListUuid];
+    const buildConfigs = xcodeProject.pbxXCBuildConfigurationSection();
+
+    // 위젯 타겟의 각 빌드 구성(Debug/Release)에만 설정 추가
+    (widgetConfigList.buildConfigurations || []).forEach(({ value: uuid }) => {
+      const cfg = buildConfigs[uuid];
+      if (!cfg || !cfg.buildSettings) return;
+      cfg.buildSettings['IPHONEOS_DEPLOYMENT_TARGET'] = DEPLOY_TARGET;
+      cfg.buildSettings['SWIFT_VERSION'] = SWIFT_VERSION;
+      cfg.buildSettings['PRODUCT_BUNDLE_IDENTIFIER'] = `"${WIDGET_BUNDLE}"`;
+      cfg.buildSettings['SKIP_INSTALL'] = 'YES';
+      cfg.buildSettings['SWIFT_EMIT_LOC_STRINGS'] = 'YES';
+      cfg.buildSettings['INFOPLIST_FILE'] = `"${WIDGET_NAME}/Info.plist"`;
+      cfg.buildSettings['CODE_SIGN_ENTITLEMENTS'] =
+        `"${WIDGET_NAME}/${WIDGET_NAME}.entitlements"`;
+      // Xcode 14 필수: Extension 타겟에 팀 ID 명시
+      if (teamId) cfg.buildSettings['DEVELOPMENT_TEAM'] = teamId;
+    });
+  }
 
   // ── 7) 메인 앱 타겟에 위젯 의존성 + Embed Extension 추가 ─────
   // 메인 타겟에서 "Embed Foundation Extensions" copy phase가 없으면 자동 생성됨
