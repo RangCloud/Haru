@@ -77,9 +77,11 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* 친구 탭 — v1.1에서 로그인 연동 후 재활성화 예정 */}
       <Tabs.Screen
         name="social"
         options={{
+          href: null,
           title: "친구",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={24} name="person.2.fill" color={color} />

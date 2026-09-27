@@ -60,7 +60,7 @@ const THEME_LABEL: Record<ThemeMode, string> = { system: "시스템", light: "�
 const THEME_ICON: Record<ThemeMode, string> = { system: "⚙️", light: "☀️", dark: "🌙" };
 const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
 
-// ── 설정 모달 ─────────────────────────────────────────────────
+// ── 설정 모달 (바텀 시트 스타일) ──────────────────────────────
 
 function SettingsModal({
   visible, onClose, colors,
@@ -87,48 +87,71 @@ function SettingsModal({
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      {/* 배경 탭 → 닫기 */}
       <Pressable style={settingStyles.overlay} onPress={onClose}>
-        <Pressable onPress={(e) => e.stopPropagation()}>
-          <View style={[settingStyles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {/* 시트 내부 탭은 닫기 차단 */}
+        <Pressable style={settingStyles.sheet} onPress={(e) => e.stopPropagation()}>
+          <View style={[settingStyles.sheetInner, { backgroundColor: colors.background }]}>
+            {/* 핸들 바 */}
+            <View style={[settingStyles.handle, { backgroundColor: colors.separator }]} />
+
             {/* 헤더 */}
             <View style={settingStyles.sheetHeader}>
               <Text style={[settingStyles.sheetTitle, { color: colors.text }]}>설정</Text>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={[settingStyles.closeBtn, { color: colors.icon }]}>✕</Text>
+                <Text style={[settingStyles.closeBtn, { color: colors.subtext }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* 테마 */}
+            {/* 화면 테마 */}
             <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>화면 테마</Text>
-            <View style={[settingStyles.themeRow, { backgroundColor: colors.background, borderRadius: 12 }]}>
-              {THEME_ORDER.map((m) => (
+            <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              {THEME_ORDER.map((m, i) => (
                 <TouchableOpacity
                   key={m}
                   style={[
-                    settingStyles.themeBtn,
+                    settingStyles.segment,
                     mode === m && { backgroundColor: colors.tint },
+                    i < THEME_ORDER.length - 1 && settingStyles.segmentBorder,
+                    i < THEME_ORDER.length - 1 && { borderColor: colors.separator },
                   ]}
                   onPress={() => setMode(m)}
                 >
-                  <Text style={settingStyles.themeBtnIcon}>{THEME_ICON[m]}</Text>
-                  <Text style={[settingStyles.themeBtnText, { color: mode === m ? "#fff" : colors.subtext }]}>
+                  <Text style={settingStyles.segmentIcon}>{THEME_ICON[m]}</Text>
+                  <Text style={[settingStyles.segmentLabel, { color: mode === m ? "#fff" : colors.subtext }]}>
                     {THEME_LABEL[m]}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* 계정 정보 */}
+            {/* 계정 */}
             <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>계정</Text>
-            <View style={[settingStyles.accountBox, { backgroundColor: colors.background }]}>
-              <Text style={[settingStyles.accountName, { color: colors.text }]}>{user?.name ?? "사용자"}</Text>
-              <Text style={[settingStyles.accountEmail, { color: colors.subtext }]}>{user?.email ?? ""}</Text>
+            <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <View style={settingStyles.listRow}>
+                <Text style={settingStyles.listIcon}>👤</Text>
+                <View style={settingStyles.listContent}>
+                  <Text style={[settingStyles.listLabel, { color: colors.text }]}>{user?.name ?? "게스트"}</Text>
+                  <Text style={[settingStyles.listSub, { color: colors.subtext }]}>
+                    {user?.email ?? "게스트 모드로 이용 중"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* 앱 정보 */}
+            <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>앱 정보</Text>
+            <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <View style={settingStyles.listRow}>
+                <Text style={[settingStyles.listLabel, { color: colors.text }]}>버전</Text>
+                <Text style={[settingStyles.listValue, { color: colors.subtext }]}>1.0.0</Text>
+              </View>
             </View>
 
             {/* 로그아웃 */}
             <TouchableOpacity
-              style={[settingStyles.logoutBtn, { borderColor: colors.expense + "60" }]}
+              style={[settingStyles.logoutBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
               onPress={handleSignOut}
             >
               <Text style={[settingStyles.logoutText, { color: colors.expense }]}>로그아웃</Text>
@@ -143,23 +166,37 @@ function SettingsModal({
 // ── 날씨 미니 위젯 ────────────────────────────────────────────
 
 function WeatherChip({ colors }: { colors: typeof Colors.light }) {
-  const { current, isLoading, usingFallback, loadWeather } = useWeatherStore();
+  const { current, isLoading, loadWeather } = useWeatherStore();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadWeather(); }, []);
 
-  if (isLoading) return <Text style={[weatherStyles.chip, { color: colors.subtext }]}>🌤 …</Text>;
-  if (!current) return null;
+  // 데이터가 없고 로딩 중일 때만 로딩 표시
+  if (!current) {
+    if (isLoading) {
+      return (
+        <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
+          <Text style={weatherStyles.chipIcon}>🌤</Text>
+          <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>…</Text>
+        </View>
+      );
+    }
+    return null;
+  }
 
   const icon = getWeatherIcon(current.sky, current.rain_type);
+  // 강수 시 강수 형태, 없으면 하늘 상태 표시
+  const condition = current.rain_type !== "없음" ? current.rain_type : current.sky;
+
+  // onPress 제거 — 누르면 current가 초기화되어 사라지는 버그 방지
   return (
-    <TouchableOpacity onPress={() => loadWeather(true)} activeOpacity={0.7}>
-      <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
-        <Text style={weatherStyles.chipIcon}>{icon}</Text>
+    <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
+      <Text style={weatherStyles.chipIcon}>{icon}</Text>
+      <View style={weatherStyles.chipInfo}>
         <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>{current.temp}°</Text>
-        {usingFallback && <Text style={[weatherStyles.chipCity, { color: colors.subtext }]}>서울</Text>}
+        <Text style={[weatherStyles.chipCondition, { color: colors.subtext }]}>{condition}</Text>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -464,7 +501,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { gap: 4, flex: 1, marginRight: 12 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 2 },
-  greeting: { fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  greeting: { fontSize: 17, fontWeight: "700", letterSpacing: -0.3 },
   date: { fontSize: 13 },
   iconBtn: { padding: 4 },
   settingsIcon: { fontSize: 20 },
@@ -537,62 +574,91 @@ const styles = StyleSheet.create({
   todoAddText: { fontSize: 14, fontWeight: "600" },
 });
 
-// ── 설정 모달 스타일 ───────────────────────────────────────────
+// ── 설정 모달 스타일 (바텀 시트) ─────────────────────────────
 
 const settingStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "#00000055",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
+    backgroundColor: "#00000060",
+    justifyContent: "flex-end",
   },
   sheet: {
     width: "100%",
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 24,
-    gap: 8,
+  },
+  sheetInner: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 12,
+    gap: 10,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 12,
   },
   sheetHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sheetTitle: { fontSize: 20, fontWeight: "700" },
   closeBtn: { fontSize: 18 },
-  sectionLabel: { fontSize: 11, fontWeight: "600", letterSpacing: 0.8, textTransform: "uppercase", marginTop: 8 },
-  // 테마 선택 행
-  themeRow: {
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginTop: 10,
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  // 테마 세그먼트
+  segmentedControl: {
     flexDirection: "row",
+    borderRadius: 14,
+    borderWidth: 1,
     overflow: "hidden",
-    padding: 4,
-    gap: 4,
   },
-  themeBtn: {
+  segment: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: "center",
-    gap: 2,
-  },
-  themeBtnIcon: { fontSize: 18 },
-  themeBtnText: { fontSize: 12, fontWeight: "500" },
-  // 계정 박스
-  accountBox: {
-    borderRadius: 12,
-    padding: 14,
     gap: 4,
   },
-  accountName: { fontSize: 15, fontWeight: "600" },
-  accountEmail: { fontSize: 13 },
+  segmentBorder: {
+    borderRightWidth: 1,
+  },
+  segmentIcon: { fontSize: 18 },
+  segmentLabel: { fontSize: 12, fontWeight: "500" },
+  // 리스트 카드 공통
+  listCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  listIcon: { fontSize: 20 },
+  listContent: { flex: 1, gap: 2 },
+  listLabel: { fontSize: 15, fontWeight: "500" },
+  listSub: { fontSize: 13 },
+  listValue: { fontSize: 14 },
   // 로그아웃
   logoutBtn: {
-    marginTop: 8,
+    marginTop: 6,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 15,
     alignItems: "center",
   },
   logoutText: { fontSize: 15, fontWeight: "600" },
@@ -601,16 +667,16 @@ const settingStyles = StyleSheet.create({
 // ── 날씨 칩 스타일 ─────────────────────────────────────────────
 
 const weatherStyles = StyleSheet.create({
-  chip: { fontSize: 13 },
   chipBox: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
-    gap: 3,
+    gap: 6,
   },
-  chipIcon: { fontSize: 16 },
-  chipTemp: { fontSize: 14, fontWeight: "600" },
-  chipCity: { fontSize: 11 },
+  chipIcon: { fontSize: 20 },
+  chipInfo: { gap: 0 },
+  chipTemp: { fontSize: 15, fontWeight: "700", lineHeight: 18 },
+  chipCondition: { fontSize: 10, lineHeight: 13 },
 });
