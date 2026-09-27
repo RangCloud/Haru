@@ -11,7 +11,7 @@ URL: https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVil
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 
 import httpx
@@ -30,6 +30,11 @@ KMA_BASE_URL = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService
 # 서버 재시작 시 초기화된다. 트래픽이 많아지면 Redis로 교체 예정.
 # ──────────────────────────────────────────────────────────────
 _cache: dict[str, tuple[float, WeatherResponse]] = {}
+
+# 기상청 발표 시각은 한국시간 기준이다. 서버(Oracle Cloud) 시계는 UTC라서
+# datetime.now()를 그대로 쓰면 9시간 전 예보를 요청하게 된다.
+# 한국은 서머타임이 없으므로 고정 +9시간 오프셋으로 충분하다(tzdata 의존성 불필요).
+KST = timezone(timedelta(hours=9))
 
 
 # ── 하늘 상태 코드 → 한국어 변환 ──────────────────────────────
@@ -120,7 +125,7 @@ async def get_weather(lat: float, lon: float) -> WeatherResponse:
     캐시 키: 격자 좌표 + 예보 기준 시각 → 같은 격자의 같은 예보 시간대면 캐시 반환.
     """
     grid = latlon_to_grid(lat, lon)
-    now = datetime.now()
+    now = datetime.now(KST)
     base_date, base_time = _get_base_time(now)
 
     cache_key = f"{grid.nx}_{grid.ny}_{base_date}_{base_time}"
