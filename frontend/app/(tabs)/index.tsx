@@ -166,29 +166,40 @@ function SettingsModal({
 // ── 날씨 미니 위젯 ────────────────────────────────────────────
 
 function WeatherChip({ colors }: { colors: typeof Colors.light }) {
-  const { current, isLoading, loadWeather } = useWeatherStore();
+  const { current, isLoading, error, loadWeather } = useWeatherStore();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadWeather(); }, []);
 
-  // 데이터가 없고 로딩 중일 때만 로딩 표시
-  if (!current) {
-    if (isLoading) {
-      return (
-        <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
-          <Text style={weatherStyles.chipIcon}>🌤</Text>
-          <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>…</Text>
-        </View>
-      );
-    }
-    return null;
+  // 로딩 중 (데이터 없을 때만)
+  if (isLoading && !current) {
+    return (
+      <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
+        <Text style={weatherStyles.chipIcon}>🌤</Text>
+        <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>…</Text>
+      </View>
+    );
   }
 
+  // 에러 발생 시 재시도 버튼 표시 (원인 파악 용이)
+  if (error && !current) {
+    return (
+      <TouchableOpacity
+        onPress={() => loadWeather(true)}
+        style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}
+        activeOpacity={0.7}
+      >
+        <Text style={weatherStyles.chipIcon}>⚠️</Text>
+        <Text style={[weatherStyles.chipTemp, { color: colors.subtext }]}>재시도</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  if (!current) return null;
+
   const icon = getWeatherIcon(current.sky, current.rain_type);
-  // 강수 시 강수 형태, 없으면 하늘 상태 표시
   const condition = current.rain_type !== "없음" ? current.rain_type : current.sky;
 
-  // onPress 제거 — 누르면 current가 초기화되어 사라지는 버그 방지
   return (
     <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
       <Text style={weatherStyles.chipIcon}>{icon}</Text>

@@ -12,6 +12,7 @@ URL: https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVil
 
 import time
 from datetime import datetime, timedelta
+from urllib.parse import unquote
 
 import httpx
 
@@ -132,7 +133,9 @@ async def get_weather(lat: float, lon: float) -> WeatherResponse:
 
     # 기상청 API 호출
     params = {
-        "authKey": settings.weather_api_key,  # 기상청 API 허브는 authKey 사용 (공공데이터포털의 serviceKey와 다름)
+        # .env에 URL 인코딩된 키가 저장된 경우 httpx가 한 번 더 인코딩해 이중 인코딩이 발생함
+        # unquote()로 먼저 디코딩 후 전달해야 기상청 서버가 올바른 키를 받는다
+        "authKey": unquote(settings.weather_api_key),
         "numOfRows": 300,   # 시간대별 × 카테고리 수 고려해 여유 있게 설정
         "pageNo": 1,
         "base_date": base_date,
