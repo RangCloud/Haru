@@ -168,11 +168,21 @@ function SettingsModal({
 function WeatherChip({ colors }: { colors: typeof Colors.light }) {
   const { current, isLoading, error, loadWeather } = useWeatherStore();
 
+  // 한 번 받은 날씨 데이터는 로컬에도 보관 — Zustand 상태가 어떤 이유로든 초기화돼도 칩이 사라지지 않도록
+  const [pinned, setPinned] = useState<typeof current>(null);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadWeather(); }, []);
 
-  // 로딩 중 (데이터 없을 때만)
-  if (isLoading && !current) {
+  useEffect(() => {
+    if (current) setPinned(current);
+  }, [current]);
+
+  // 표시에 쓸 데이터: 스토어 최신값 우선, 없으면 로컬에 고정된 값
+  const display = current ?? pinned;
+
+  // 로딩 중이고 아직 표시할 데이터가 없을 때만 로딩 인디케이터
+  if (isLoading && !display) {
     return (
       <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
         <Text style={weatherStyles.chipIcon}>🌤</Text>
@@ -181,8 +191,8 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
     );
   }
 
-  // 에러 발생 시 재시도 버튼 표시 (원인 파악 용이)
-  if (error && !current) {
+  // 에러 발생 시: 이전에 받은 데이터가 있으면 그대로 표시, 없으면 재시도 버튼
+  if (error && !display) {
     return (
       <TouchableOpacity
         onPress={() => loadWeather(true)}
@@ -195,16 +205,16 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
     );
   }
 
-  if (!current) return null;
+  if (!display) return null;
 
-  const icon = getWeatherIcon(current.sky, current.rain_type);
-  const condition = current.rain_type !== "없음" ? current.rain_type : current.sky;
+  const icon = getWeatherIcon(display.sky, display.rain_type);
+  const condition = display.rain_type !== "없음" ? display.rain_type : display.sky;
 
   return (
     <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
       <Text style={weatherStyles.chipIcon}>{icon}</Text>
       <View style={weatherStyles.chipInfo}>
-        <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>{current.temp}°</Text>
+        <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>{display.temp}°</Text>
         <Text style={[weatherStyles.chipCondition, { color: colors.subtext }]}>{condition}</Text>
       </View>
     </View>
