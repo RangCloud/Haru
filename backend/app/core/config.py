@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # 기상청 공공데이터포털 API 인증키 (단기예보조회서비스)
+    # 기상청 API 허브 인증키(authKey) — 공공데이터포털(data.go.kr) 서비스키와 호환되지 않음
     weather_api_key: str = ""
 
     # 날씨 캐시 TTL(초) — 기상청 단기예보는 3시간마다 갱신되므로 1시간 캐시로 충분
