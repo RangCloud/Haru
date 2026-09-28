@@ -1,48 +1,55 @@
 /**
- * 일정 + 가계부 통합 화면
+ * 일정 + 가계부 + 할 일 통합 화면
  *
  * 구조:
- * 1. 월 선택 헤더 (< 2025년 6월 >)
- * 2. 달력 그리드 (일정·거래 있는 날짜에 dot 표시)
- * 3. 선택된 날짜의 일정 목록 + 거래 내역
- * 4. "+ 추가" FAB → "일정 추가 / 지출 추가 / 수입 추가" 선택
+ * 1. 월 헤더 (‹ 2026년 9월 › · 오늘 버튼)
+ * 2. 달력 (좌우 스와이프로 달 이동, 날짜 아래 일정 색 점·수입/지출 막대)
+ * 3. 선택한 날짜 바 (한눈에 보기 버튼)
+ * 4. 그날의 일정 → 할 일·루틴 → 수입·지출 목록
+ * 5. "+ 추가" → 일정 / 할 일 / 지출 / 수입
  *
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Alert,
-  Dimensions,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { BottomSheet } from "@/src/components/BottomSheet";
+import { DateField, TimeField } from "@/src/components/DateTimeFields";
+import { MonthCalendar, type DayMark } from "@/src/components/MonthCalendar";
+import { TodoAddSheet } from "@/src/components/TodoAddSheet";
+import { TodoList } from "@/src/components/TodoList";
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
   type NewTransaction,
   type Transaction,
 } from "@/src/db/budget";
-import { type ScheduleItem } from "@/src/db/schedule";
+import { type ColorLabels } from "@/src/db/colorLabel";
+import { type RoutineForDate } from "@/src/db/routine";
+import { type NewScheduleItem, type ScheduleItem } from "@/src/db/schedule";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
+import { useTodoStore } from "@/src/store/todoStore";
+import { formatMonthDay, parseDate, shiftMonth, toDateStr, todayString } from "@/src/utils/date";
 import { scheduleEventNotification } from "@/src/utils/notifications";
+import { lastDayOf, periodLabel, timeLabelOn } from "@/src/utils/scheduleText";
+
+type ThemeColors = (typeof Colors)["light"];
 
 // ── 색상 팔레트 ───────────────────────────────────────────────
-// 일정별 색상 선택 시 제공할 색상 목록
+// 일정별 색상 선택 시 제공할 색상 목록 — 각 색에 사용자가 이름(카테고리)을 붙일 수 있다
 const SCHEDULE_COLORS = [
   "#6B6EE7", // 인디고 (기본)
   "#3B82F6", // 파랑
@@ -56,198 +63,169 @@ const SCHEDULE_COLORS = [
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
-function todayString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function isValidDate(s: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const [y, m, d] = s.split("-").map(Number);
-  if (m < 1 || m > 12 || d < 1) return false;
-  const date = new Date(y, m - 1, d);
-  return date.getMonth() === m - 1 && date.getDate() === d;
-}
-
-function autoFormatDate(input: string): string {
-  const digits = input.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-}
-
-function autoFormatTime(input: string): string {
-  const digits = input.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-}
-
-function parseDate(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
 function formatAmount(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
 }
 
-function buildCalendarDays(year: number, month: number): (number | null)[] {
-  const firstDay = new Date(year, month - 1, 1).getDay();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
-  return cells;
+/** '#RRGGBB' + 투명도 → 연한 배경색 (라벨 칩용) */
+function withAlpha(hex: string, alpha: string): string {
+  return `${hex}${alpha}`;
 }
 
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+/**
+ * 달력 표시용 날짜별 표식을 만든다.
+ * 기간 일정은 기간 안의 모든 날짜에 색 점을 찍되, 보고 있는 달 범위 안에서만 계산한다.
+ */
+function buildMarks(year: number, month: number, schedules: ScheduleItem[], txs: Transaction[]): Record<string, DayMark> {
+  const marks: Record<string, DayMark> = {};
+  const get = (d: string) => (marks[d] ??= { scheduleColors: [], income: false, expense: false });
+  const monthStart = toDateStr(year, month, 1);
+  const monthEnd = toDateStr(year, month, new Date(year, month, 0).getDate());
 
-// ── 달력 그리드 ───────────────────────────────────────────────
-
-interface CalendarProps {
-  year: number;
-  month: number;
-  selectedDate: string;
-  markedDates: Set<string>;
-  colors: (typeof Colors)["light"];
-  onSelectDate: (date: string) => void;
+  for (const s of schedules) {
+    const from = s.date > monthStart ? s.date : monthStart;
+    const to = lastDayOf(s) < monthEnd ? lastDayOf(s) : monthEnd;
+    for (let d = parseDate(from); ; d.setDate(d.getDate() + 1)) {
+      const ds = toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      if (ds > to) break;
+      const m = get(ds);
+      const color = s.color || SCHEDULE_COLORS[0];
+      if (!m.scheduleColors.includes(color)) m.scheduleColors.push(color);
+    }
+  }
+  for (const t of txs) {
+    const m = get(t.date);
+    if (t.type === "income") m.income = true;
+    else m.expense = true;
+  }
+  return marks;
 }
 
-function Calendar({ year, month, selectedDate, markedDates, colors, onSelectDate }: CalendarProps) {
-  const today = todayString();
-  const days = buildCalendarDays(year, month);
-
-  return (
-    <View style={styles.calendar}>
-      <View style={styles.weekdayRow}>
-        {WEEKDAYS.map((w, i) => (
-          <Text
-            key={w}
-            style={[
-              styles.weekdayText,
-              { color: i === 0 ? "#e74c3c" : i === 6 ? "#3498db" : colors.icon },
-            ]}
-          >
-            {w}
-          </Text>
-        ))}
-      </View>
-      <View style={styles.daysGrid}>
-        {days.map((day, idx) => {
-          if (day === null) return <View key={`empty-${idx}`} style={styles.dayCell} />;
-          const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const isSelected = dateStr === selectedDate;
-          const isToday = dateStr === today;
-          const hasEvent = markedDates.has(dateStr);
-          const dayOfWeek = idx % 7;
-          return (
-            <TouchableOpacity
-              key={dateStr}
-              style={[styles.dayCell, isSelected && { backgroundColor: colors.tint, borderRadius: 24 }]}
-              onPress={() => onSelectDate(dateStr)}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.dayText,
-                {
-                  color: isSelected ? "#fff" : dayOfWeek === 0 ? "#e74c3c" : dayOfWeek === 6 ? "#3498db" : colors.text,
-                  fontWeight: isToday ? "700" : "400",
-                },
-              ]}>
-                {day}
-              </Text>
-              {isToday && !isSelected && (
-                // 오늘 날짜 밑줄 강조 (선택 상태가 아닐 때만)
-                <View style={[styles.todayDot, { backgroundColor: colors.tint }]} />
-              )}
-              {hasEvent && (
-                <View style={[styles.eventDot, { backgroundColor: isSelected ? "#fff" : colors.tint }]} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// ── 색상 선택 칩 ──────────────────────────────────────────────
+// ── 색상 선택 + 색상 이름 (피드백 9번) ─────────────────────────
 
 function ColorPicker({
-  value, onChange, colors,
+  value, onChange, labels, onSaveLabel, colors,
 }: {
   value: string;
   onChange: (c: string) => void;
-  colors: (typeof Colors)["light"];
+  labels: ColorLabels;
+  onSaveLabel: (color: string, label: string) => void;
+  colors: ThemeColors;
 }) {
+  const [editing, setEditing] = useState(false);
+  // 입력 중인 이름 — 입력칸을 벗어날 때(onEndEditing) 저장한다
+  const [drafts, setDrafts] = useState<ColorLabels>({});
+
+  const startEdit = () => { setDrafts(labels); setEditing(true); };
+
   return (
-    <View style={styles.colorPicker}>
-      {SCHEDULE_COLORS.map((c) => (
-        <TouchableOpacity
-          key={c}
-          style={[
-            styles.colorChip,
-            { backgroundColor: c },
-            value === c && styles.colorChipSelected,
-          ]}
-          onPress={() => onChange(c)}
-          activeOpacity={0.8}
-        >
-          {value === c && <Text style={styles.colorCheckmark}>✓</Text>}
-        </TouchableOpacity>
-      ))}
+    <View style={styles.colorSection}>
+      <View style={styles.colorPicker}>
+        {SCHEDULE_COLORS.map((c) => (
+          <TouchableOpacity
+            key={c}
+            style={styles.colorItem}
+            onPress={() => onChange(c)}
+            onLongPress={startEdit}
+            activeOpacity={0.8}
+            accessibilityLabel={`${labels[c] ?? "이름 없는"} 색상${value === c ? ", 선택됨" : ""}`}
+          >
+            <View style={[styles.colorChip, { backgroundColor: c }, value === c && styles.colorChipSelected]}>
+              {value === c && <Text style={styles.colorCheckmark}>✓</Text>}
+            </View>
+            <Text style={[styles.colorLabel, { color: value === c ? colors.text : colors.subtext }]} numberOfLines={1}>
+              {labels[c] ?? ""}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <TouchableOpacity onPress={() => (editing ? setEditing(false) : startEdit())}>
+        <Text style={[styles.colorEditLink, { color: colors.tint }]}>
+          {editing ? "색상 이름 편집 닫기" : "색상에 이름 붙이기 (예: 파랑 = 회사)"}
+        </Text>
+      </TouchableOpacity>
+      {editing && (
+        <View style={[styles.labelEditor, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          {SCHEDULE_COLORS.map((c) => (
+            <View key={c} style={styles.labelRow}>
+              <View style={[styles.labelDot, { backgroundColor: c }]} />
+              <TextInput
+                style={[styles.labelInput, { color: colors.text, borderColor: colors.separator }]}
+                placeholder="이름 없음"
+                placeholderTextColor={colors.subtext}
+                value={drafts[c] ?? ""}
+                maxLength={8}
+                onChangeText={(t) => setDrafts((d) => ({ ...d, [c]: t }))}
+                onEndEditing={() => onSaveLabel(c, drafts[c] ?? "")}
+                returnKeyType="done"
+              />
+            </View>
+          ))}
+          <Text style={[styles.labelHint, { color: colors.subtext }]}>
+            이름은 입력칸을 벗어나면 저장되고, 같은 색의 모든 일정에 바로 적용됩니다.
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
 // ── 일정 행 ───────────────────────────────────────────────────
 
-function ScheduleRow({ item, colors, onDelete, onEdit, onShare }: {
+function ScheduleRow({ item, date, label, colors, onDelete, onEdit }: {
   item: ScheduleItem;
-  colors: (typeof Colors)["light"];
+  date: string;
+  label?: string;
+  colors: ThemeColors;
   onDelete: () => void;
   onEdit: () => void;
-  onShare: () => void;
 }) {
-  // 일정별 색상 — DB에 없는 경우 기본 tint 색상 사용
   const barColor = item.color || colors.tint;
+  const period = periodLabel(item);
+  const timeLabel = timeLabelOn(item, date);
 
   return (
     <TouchableOpacity
       style={[styles.scheduleRow, { borderLeftColor: barColor }]}
       onLongPress={() =>
         Alert.alert("일정 관리", item.title, [
-          { text: "취소", style: "cancel" },
-          { text: "공유", onPress: onShare },
           { text: "수정", onPress: onEdit },
           { text: "삭제", style: "destructive", onPress: onDelete },
+          { text: "취소", style: "cancel" },
         ])
       }
       activeOpacity={0.7}
     >
       <View style={styles.scheduleMain}>
-        <Text style={[styles.scheduleTitle, { color: colors.text }]}>{item.title}</Text>
-        {item.note ? (
-          <Text style={[styles.scheduleNote, { color: colors.icon }]} numberOfLines={1}>{item.note}</Text>
+        <View style={styles.scheduleTitleRow}>
+          {label ? (
+            <View style={[styles.labelPill, { backgroundColor: withAlpha(barColor, "22") }]}>
+              <Text style={[styles.labelPillText, { color: barColor }]}>{label}</Text>
+            </View>
+          ) : null}
+          <Text style={[styles.scheduleTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+        </View>
+        {period || item.note ? (
+          <Text style={[styles.scheduleNote, { color: colors.subtext }]} numberOfLines={1}>
+            {[period, item.note].filter(Boolean).join(" · ")}
+          </Text>
         ) : null}
       </View>
-      <Text style={[styles.scheduleTime, { color: item.time ? barColor : colors.icon }]}>
-        {item.time || "종일"}
-      </Text>
+      <Text style={[styles.scheduleTime, { color: timeLabel === "종일" ? colors.subtext : barColor }]}>{timeLabel}</Text>
     </TouchableOpacity>
   );
 }
 
-// ── 거래 행 ───────────────────────────────────────────────────
+// ── 거래 행 (피드백 6번: 수입·지출 태그 색 구분) ─────────────────
 
 function TransactionRow({ item, colors, onDelete, onEdit }: {
   item: Transaction;
-  colors: (typeof Colors)["light"];
+  colors: ThemeColors;
   onDelete: () => void;
   onEdit: () => void;
 }) {
   const isIncome = item.type === "income";
+  const tone = isIncome ? colors.income : colors.expense;
   return (
     <TouchableOpacity
       style={[styles.txRow, { borderBottomColor: colors.separator }]}
@@ -256,134 +234,161 @@ function TransactionRow({ item, colors, onDelete, onEdit }: {
           "거래 관리",
           `${item.category}  ${isIncome ? "+" : "-"}${formatAmount(item.amount)}`,
           [
-            { text: "취소", style: "cancel" },
             { text: "수정", onPress: onEdit },
             { text: "삭제", style: "destructive", onPress: onDelete },
+            { text: "취소", style: "cancel" },
           ],
         )
       }
       activeOpacity={0.7}
     >
-      <View style={[styles.txBadge, { backgroundColor: colors.tintLight }]}>
-        <Text style={[styles.txBadgeText, { color: colors.tint }]}>{item.category}</Text>
+      <View style={[styles.txBadge, { backgroundColor: withAlpha(tone, "1F") }]}>
+        <Text style={[styles.txBadgeText, { color: tone }]}>{isIncome ? "수입" : "지출"} · {item.category}</Text>
       </View>
       <Text style={[styles.txNote, { color: colors.text }]} numberOfLines={1}>
         {item.note || item.category}
       </Text>
-      <Text style={[styles.txAmount, { color: isIncome ? colors.income : colors.expense }]}>
+      <Text style={[styles.txAmount, { color: tone }]}>
         {isIncome ? "+" : "-"}{formatAmount(item.amount)}
       </Text>
     </TouchableOpacity>
   );
 }
 
-// ── 일정 추가·수정 모달 ───────────────────────────────────────
+// ── 일정 추가·수정 시트 (피드백 8·12·14번) ──────────────────────
 
 interface ScheduleModalProps {
   visible: boolean;
   initialDate: string;
   onClose: () => void;
-  onAdd: (s: { title: string; date: string; time: string; note: string; color: string }) => void;
-  onUpdate: (s: { title: string; date: string; time: string; note: string; color: string }) => void;
-  colors: (typeof Colors)["light"];
+  onSubmit: (s: NewScheduleItem) => void;
+  colors: ThemeColors;
   initialData?: ScheduleItem;
+  labels: ColorLabels;
+  onSaveLabel: (color: string, label: string) => void;
 }
 
-function ScheduleModal({ visible, initialDate, onClose, onAdd, onUpdate, colors, initialData }: ScheduleModalProps) {
+function ScheduleModal({ visible, initialDate, onClose, onSubmit, colors, initialData, labels, onSaveLabel }: ScheduleModalProps) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(initialDate);
+  const [endDate, setEndDate] = useState("");
   const [time, setTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [note, setNote] = useState("");
   const [color, setColor] = useState(SCHEDULE_COLORS[0]);
   const isEdit = !!initialData;
 
   useEffect(() => {
     if (!visible) return;
-    if (initialData) {
-      setTitle(initialData.title);
-      setDate(initialData.date);
-      setTime(initialData.time);
-      setNote(initialData.note);
-      setColor(initialData.color || SCHEDULE_COLORS[0]);
-    } else {
-      setTitle(""); setDate(initialDate); setTime(""); setNote("");
-      setColor(SCHEDULE_COLORS[0]);
-    }
+    setTitle(initialData?.title ?? "");
+    setDate(initialData?.date ?? initialDate);
+    setEndDate(initialData?.end_date ?? "");
+    setTime(initialData?.time ?? "");
+    setEndTime(initialData?.end_time ?? "");
+    setNote(initialData?.note ?? "");
+    setColor(initialData?.color || SCHEDULE_COLORS[0]);
   }, [visible, initialDate, initialData]);
+
+  // 시작일을 종료일보다 뒤로 옮기면 종료일을 비운다 (거꾸로 된 기간 방지)
+  const changeStart = (d: string) => {
+    setDate(d);
+    if (endDate && endDate <= d) setEndDate("");
+  };
+
+  const multiDay = !!endDate && endDate > date;
 
   const handleSubmit = () => {
     if (!title.trim()) { Alert.alert("입력 오류", "제목을 입력해 주세요."); return; }
-    if (!isValidDate(date)) { Alert.alert("입력 오류", "올바른 날짜를 입력해 주세요.\n예) 2025-06-15"); return; }
-    if (time) {
-      if (!/^\d{2}:\d{2}$/.test(time)) { Alert.alert("입력 오류", "시간을 HH:MM 형식으로 입력하거나 비워두세요."); return; }
-      const [h, m] = time.split(":").map(Number);
-      if (h > 23 || m > 59) { Alert.alert("입력 오류", "올바른 시간을 입력해 주세요.\n시(0-23), 분(0-59)"); return; }
+    if (endTime && !time) { Alert.alert("입력 오류", "끝나는 시간을 정하려면 시작 시간도 골라 주세요."); return; }
+    // 하루짜리 일정은 끝 시각이 시작 시각보다 뒤여야 한다 (기간 일정은 마지막 날 기준이라 비교하지 않음)
+    if (!multiDay && time && endTime && endTime <= time) {
+      Alert.alert("입력 오류", "끝나는 시간은 시작 시간보다 늦어야 합니다.");
+      return;
     }
-    const data = { title: title.trim(), date, time, note: note.trim(), color };
-    if (isEdit) onUpdate(data); else onAdd(data);
+    onSubmit({
+      title: title.trim(),
+      date,
+      end_date: multiDay ? endDate : "",
+      time,
+      end_time: time ? endTime : "",
+      note: note.trim(),
+      color,
+    });
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      {/* backdrop 탭으로 모달 닫기 */}
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <KeyboardAvoidingView
-          style={styles.modalAvoidView}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          {/* 내용 영역은 탭해도 닫히지 않도록 전파 차단 */}
-          <Pressable onPress={(e) => e.stopPropagation()}>
-            <View style={[styles.modalSheet, { backgroundColor: colors.background }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "일정 수정" : "일정 추가"}</Text>
-                <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                  <Text style={[styles.modalClose, { color: colors.icon }]}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={[styles.fieldLabel, { color: colors.icon }]}>제목 *</Text>
-              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-                placeholder="일정 제목" placeholderTextColor={colors.icon}
-                value={title} onChangeText={setTitle} autoFocus={!isEdit} />
-              <Text style={[styles.fieldLabel, { color: colors.icon }]}>날짜</Text>
-              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-                placeholder="YYYY-MM-DD" placeholderTextColor={colors.icon}
-                keyboardType="number-pad" value={date} onChangeText={(t) => setDate(autoFormatDate(t))} />
-              <Text style={[styles.fieldLabel, { color: colors.icon }]}>시간 (선택 — 비우면 종일)</Text>
-              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-                placeholder="HH:MM  예) 14:30" placeholderTextColor={colors.icon}
-                keyboardType="number-pad" value={time} onChangeText={(t) => setTime(autoFormatTime(t))} />
-              <Text style={[styles.fieldLabel, { color: colors.icon }]}>메모 (선택)</Text>
-              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.icon + "40" }]}
-                placeholder="메모" placeholderTextColor={colors.icon}
-                value={note} onChangeText={setNote} />
-              {/* 색상 선택 */}
-              <Text style={[styles.fieldLabel, { color: colors.icon }]}>색상</Text>
-              <ColorPicker value={color} onChange={setColor} colors={colors} />
-              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: color }]} onPress={handleSubmit}>
-                <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={isEdit ? "일정 수정" : "일정 추가"}
+      colors={colors}
+      footer={
+        <TouchableOpacity style={[styles.submitBtn, { backgroundColor: color }]} onPress={handleSubmit}>
+          <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
+        </TouchableOpacity>
+      }
+    >
+      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>제목 *</Text>
+      <TextInput
+        style={[styles.input, { color: colors.text, borderColor: colors.separator, backgroundColor: colors.card }]}
+        placeholder="일정 제목" placeholderTextColor={colors.subtext}
+        value={title} onChangeText={setTitle} autoFocus={!isEdit}
+      />
+
+      <DateField label="시작일" value={date} onChange={changeStart} colors={colors} />
+      <DateField
+        label="종료일 (선택 — 여러 날 이어지는 일정)"
+        value={endDate}
+        placeholder="하루 일정"
+        minDate={date}
+        onChange={(d) => setEndDate(d === date ? "" : d)}
+        onClear={() => setEndDate("")}
+        colors={colors}
+      />
+
+      <TimeField
+        label={multiDay ? "시작 시간 (첫날)" : "시작 시간"}
+        value={time}
+        placeholder="종일"
+        onChange={(t) => { setTime(t); if (!t) setEndTime(""); }}
+        colors={colors}
+      />
+      {time ? (
+        <TimeField
+          label={multiDay ? "끝나는 시간 (마지막 날, 선택)" : "끝나는 시간 (선택)"}
+          value={endTime}
+          placeholder="정하지 않음"
+          onChange={setEndTime}
+          colors={colors}
+        />
+      ) : null}
+
+      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
+      <TextInput
+        style={[styles.input, { color: colors.text, borderColor: colors.separator, backgroundColor: colors.card }]}
+        placeholder="메모" placeholderTextColor={colors.subtext}
+        value={note} onChangeText={setNote}
+      />
+
+      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>색상</Text>
+      <ColorPicker value={color} onChange={setColor} labels={labels} onSaveLabel={onSaveLabel} colors={colors} />
+    </BottomSheet>
   );
 }
 
-// ── 거래 추가·수정 모달 ───────────────────────────────────────
+// ── 거래 추가·수정 시트 ───────────────────────────────────────
 
 interface BudgetModalProps {
   visible: boolean;
   initialDate: string;
   initialType?: "income" | "expense";
   onClose: () => void;
-  onAdd: (t: NewTransaction) => void;
-  onUpdate: (t: NewTransaction) => void;
-  colors: (typeof Colors)["light"];
+  onSubmit: (t: NewTransaction) => void;
+  colors: ThemeColors;
   initialData?: Transaction;
 }
 
-function BudgetModal({ visible, initialDate, initialType = "expense", onClose, onAdd, onUpdate, colors, initialData }: BudgetModalProps) {
+function BudgetModal({ visible, initialDate, initialType = "expense", onClose, onSubmit, colors, initialData }: BudgetModalProps) {
   const [type, setType] = useState<"income" | "expense">(initialData?.type ?? initialType);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
@@ -405,6 +410,7 @@ function BudgetModal({ visible, initialDate, initialType = "expense", onClose, o
   }, [visible, initialDate, initialType, initialData]);
 
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const tone = type === "expense" ? colors.expense : colors.income;
 
   const switchType = (t: "income" | "expense") => {
     setType(t);
@@ -420,90 +426,144 @@ function BudgetModal({ visible, initialDate, initialType = "expense", onClose, o
   const handleSubmit = () => {
     const num = parseInt(amount.replace(/,/g, ""), 10);
     if (!num || num <= 0) { Alert.alert("입력 오류", "금액을 올바르게 입력해 주세요."); return; }
-    if (!isValidDate(date)) { Alert.alert("입력 오류", "올바른 날짜를 입력해 주세요.\n예) 2025-06-15"); return; }
-    const data = { type, amount: num, category, note: note.trim(), date };
-    if (isEdit) onUpdate(data); else onAdd(data);
+    onSubmit({ type, amount: num, category, note: note.trim(), date });
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      {/* backdrop 탭으로 닫기 */}
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <KeyboardAvoidingView
-          style={styles.modalAvoidView}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <Pressable onPress={(e) => e.stopPropagation()}>
-            <ScrollView
-              contentContainerStyle={[styles.modalSheet, { backgroundColor: colors.card }]}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.modalHandle} />
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>{isEdit ? "거래 수정" : "거래 추가"}</Text>
-                <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                  <Text style={[styles.modalClose, { color: colors.subtext }]}>✕</Text>
-                </TouchableOpacity>
-              </View>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={isEdit ? "거래 수정" : "거래 추가"}
+      colors={colors}
+      footer={
+        <TouchableOpacity style={[styles.submitBtn, { backgroundColor: tone }]} onPress={handleSubmit}>
+          <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
+        </TouchableOpacity>
+      }
+    >
+      {/* 수입/지출 토글 */}
+      <View style={[styles.typeToggle, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {(["expense", "income"] as const).map((t) => (
+          <TouchableOpacity
+            key={t}
+            style={[styles.typeBtn, type === t && { backgroundColor: t === "expense" ? colors.expense : colors.income }]}
+            onPress={() => switchType(t)}
+          >
+            <Text style={[styles.typeBtnText, { color: type === t ? "#fff" : colors.subtext }]}>
+              {t === "expense" ? "지출" : "수입"}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-              {/* 수입/지출 토글 */}
-              <View style={[styles.typeToggle, { backgroundColor: colors.background }]}>
-                {(["expense", "income"] as const).map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.typeBtn, type === t && { backgroundColor: t === "expense" ? colors.expense : colors.income }]}
-                    onPress={() => switchType(t)}
-                  >
-                    <Text style={[styles.typeBtnText, { color: type === t ? "#fff" : colors.subtext }]}>
-                      {t === "expense" ? "지출" : "수입"}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>금액</Text>
+      <TextInput
+        style={[styles.input, { color: colors.text, backgroundColor: colors.card, borderColor: colors.separator }]}
+        placeholder="금액 입력 (원)" placeholderTextColor={colors.subtext}
+        keyboardType="number-pad" value={amount} onChangeText={handleAmountChange} autoFocus={!isEdit}
+      />
 
-              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>금액</Text>
-              <TextInput
-                style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
-                placeholder="금액 입력 (원)" placeholderTextColor={colors.subtext}
-                keyboardType="number-pad" value={amount} onChangeText={handleAmountChange} autoFocus={!isEdit}
-              />
+      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>카테고리</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryList}>
+        {categories.map((c) => (
+          <TouchableOpacity
+            key={c}
+            style={[styles.categoryChip, { borderColor: colors.separator, backgroundColor: colors.card },
+              category === c && { backgroundColor: tone, borderColor: tone }]}
+            onPress={() => setCategory(c)}
+          >
+            <Text style={[styles.categoryText, { color: category === c ? "#fff" : colors.subtext }]}>{c}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>카테고리</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryList}>
-                {categories.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[styles.categoryChip, { borderColor: colors.separator, backgroundColor: colors.background },
-                      category === c && { backgroundColor: colors.tint, borderColor: colors.tint }]}
-                    onPress={() => setCategory(c)}
-                  >
-                    <Text style={[styles.categoryText, { color: category === c ? "#fff" : colors.subtext }]}>{c}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+      <DateField label="날짜" value={date} onChange={setDate} colors={colors} />
 
-              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>날짜</Text>
-              <TextInput
-                style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
-                placeholder="YYYY-MM-DD" placeholderTextColor={colors.subtext}
-                keyboardType="number-pad" value={date} onChangeText={(t) => setDate(autoFormatDate(t))}
-              />
+      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
+      <TextInput
+        style={[styles.input, { color: colors.text, backgroundColor: colors.card, borderColor: colors.separator }]}
+        placeholder="메모" placeholderTextColor={colors.subtext}
+        value={note} onChangeText={setNote}
+      />
+    </BottomSheet>
+  );
+}
 
-              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
-              <TextInput
-                style={[styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.separator }]}
-                placeholder="메모" placeholderTextColor={colors.subtext}
-                value={note} onChangeText={setNote}
-              />
+// ── 하루 한눈에 보기 (피드백 15번) ─────────────────────────────
 
-              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.tint }]} onPress={handleSubmit}>
-                <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+function DetailSection({ title, right, children, colors }: { title: string; right?: string; children: ReactNode; colors: ThemeColors }) {
+  return (
+    <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={styles.detailHeader}>
+        <Text style={[styles.detailTitle, { color: colors.subtext }]}>{title}</Text>
+        {right ? <Text style={[styles.detailRight, { color: colors.subtext }]}>{right}</Text> : null}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function DayDetailSheet({
+  visible, onClose, date, schedules, todoCount, doneCount, txs, labels, colors,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  date: string;
+  schedules: ScheduleItem[];
+  todoCount: number;
+  doneCount: number;
+  txs: Transaction[];
+  labels: ColorLabels;
+  colors: ThemeColors;
+}) {
+  const incomes = txs.filter((t) => t.type === "income");
+  const expenses = txs.filter((t) => t.type === "expense");
+  const sum = (list: Transaction[]) => list.reduce((s, t) => s + t.amount, 0);
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={formatMonthDay(date)} colors={colors}>
+      <DetailSection colors={colors} title="일정" right={`${schedules.length}개`}>
+        {schedules.length === 0 ? (
+          <Text style={[styles.detailEmpty, { color: colors.subtext }]}>일정이 없습니다.</Text>
+        ) : schedules.map((s) => (
+          <View key={s.id} style={styles.detailLine}>
+            <View style={[styles.detailDot, { backgroundColor: s.color || colors.tint }]} />
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>
+              {labels[s.color] ? `[${labels[s.color]}] ` : ""}{s.title}
+            </Text>
+            <Text style={[styles.detailMeta, { color: colors.subtext }]}>{timeLabelOn(s, date)}</Text>
+          </View>
+        ))}
+      </DetailSection>
+
+      <DetailSection colors={colors} title="할 일" right={todoCount ? `${doneCount}/${todoCount} 완료` : undefined}>
+        <Text style={[styles.detailEmpty, { color: colors.subtext }]}>
+          {todoCount ? `할 일 ${todoCount}개 중 ${doneCount}개를 끝냈어요.` : "할 일이 없습니다."}
+        </Text>
+      </DetailSection>
+
+      <DetailSection colors={colors} title="지출" right={expenses.length ? `-${formatAmount(sum(expenses))}` : undefined}>
+        {expenses.length === 0 ? (
+          <Text style={[styles.detailEmpty, { color: colors.subtext }]}>지출이 없습니다.</Text>
+        ) : expenses.map((t) => (
+          <View key={t.id} style={styles.detailLine}>
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{t.category}{t.note ? ` · ${t.note}` : ""}</Text>
+            <Text style={[styles.detailAmount, { color: colors.expense }]}>-{formatAmount(t.amount)}</Text>
+          </View>
+        ))}
+      </DetailSection>
+
+      <DetailSection colors={colors} title="수입" right={incomes.length ? `+${formatAmount(sum(incomes))}` : undefined}>
+        {incomes.length === 0 ? (
+          <Text style={[styles.detailEmpty, { color: colors.subtext }]}>수입이 없습니다.</Text>
+        ) : incomes.map((t) => (
+          <View key={t.id} style={styles.detailLine}>
+            <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={1}>{t.category}{t.note ? ` · ${t.note}` : ""}</Text>
+            <Text style={[styles.detailAmount, { color: colors.income }]}>+{formatAmount(t.amount)}</Text>
+          </View>
+        ))}
+      </DetailSection>
+    </BottomSheet>
   );
 }
 
@@ -511,203 +571,240 @@ function BudgetModal({ visible, initialDate, initialType = "expense", onClose, o
 
 export default function ScheduleScreen() {
   const colors = Colors[useColorScheme() ?? "light"];
+  const insets = useSafeAreaInsets();
 
-  // 일정 store
   const {
-    monthSchedules, selectedDate, selectedDateSchedules,
+    monthSchedules, selectedDate, selectedDateSchedules, colorLabels,
     year, month, isLoaded,
-    loadMonth, selectDate, add: addSchedule, update: updateSchedule, remove: removeSchedule,
+    loadMonth, selectDate, goToday, loadColorLabels, saveColorLabel,
+    add: addSchedule, update: updateSchedule, remove: removeSchedule,
   } = useScheduleStore();
 
-  // 가계부 store — 선택된 월의 거래를 함께 불러온다
   const {
     transactions, loadMonth: loadBudgetMonth,
     add: addTransaction, update: updateTransaction, remove: removeTransaction,
   } = useBudgetStore();
 
-  // 일정 모달 상태
+  const { selectedTodos, selectedRoutines, loadDate: loadTodosForDate } = useTodoStore();
+
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [editSchedule, setEditSchedule] = useState<ScheduleItem | undefined>();
-
-  // 가계부 모달 상태
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
   const [budgetInitialType, setBudgetInitialType] = useState<"income" | "expense">("expense");
   const [editTransaction, setEditTransaction] = useState<Transaction | undefined>();
+  const [todoSheetVisible, setTodoSheetVisible] = useState(false);
+  const [editRoutine, setEditRoutine] = useState<{ id: number; title: string; weekdays: string } | undefined>();
+  const [detailVisible, setDetailVisible] = useState(false);
 
-  // 초기 로드 + 월 변경 시 일정·가계부 함께 로드
+  // 첫 진입: 보고 있는 달의 일정·거래와 색상 이름을 불러온다
   useEffect(() => {
     loadMonth(year, month);
     loadBudgetMonth(year, month);
+    loadColorLabels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const prevMonth = useCallback(() => {
-    const nm = month === 1 ? 12 : month - 1;
-    const ny = month === 1 ? year - 1 : year;
-    loadMonth(ny, nm);
-    loadBudgetMonth(ny, nm);
+  // 날짜를 고를 때마다 그날의 할 일·루틴을 불러온다 (피드백 2번)
+  useEffect(() => {
+    loadTodosForDate(selectedDate);
+  }, [selectedDate, loadTodosForDate]);
+
+  const changeMonth = useCallback((delta: -1 | 1) => {
+    const next = shiftMonth(year, month, delta);
+    loadMonth(next.year, next.month);
+    loadBudgetMonth(next.year, next.month);
   }, [year, month, loadMonth, loadBudgetMonth]);
 
-  const nextMonth = useCallback(() => {
-    const nm = month === 12 ? 1 : month + 1;
-    const ny = month === 12 ? year + 1 : year;
-    loadMonth(ny, nm);
-    loadBudgetMonth(ny, nm);
-  }, [year, month, loadMonth, loadBudgetMonth]);
+  // 피드백 4번: 오늘로 돌아가기
+  const handleGoToday = useCallback(async () => {
+    await goToday();
+    const d = new Date();
+    await loadBudgetMonth(d.getFullYear(), d.getMonth() + 1);
+  }, [goToday, loadBudgetMonth]);
 
-  // 선택된 날짜의 거래 내역
   const selectedDateTransactions = transactions.filter((t) => t.date === selectedDate);
+  const marks = useMemo(
+    () => buildMarks(year, month, monthSchedules, transactions),
+    [year, month, monthSchedules, transactions],
+  );
 
-  // 달력 dot: 일정 또는 거래가 있는 날짜
-  const scheduleDates = new Set(monthSchedules.map((s) => s.date));
-  const txDates = new Set(transactions.map((t) => t.date));
-  const markedDates = new Set([...scheduleDates, ...txDates]);
-
-  // "+ 추가" FAB 탭 → 종류 선택
   const handleFabPress = () => {
-    Alert.alert("추가하기", undefined, [
+    Alert.alert("추가하기", formatMonthDay(selectedDate), [
       { text: "📅 일정 추가", onPress: () => { setEditSchedule(undefined); setScheduleModalVisible(true); } },
+      { text: "✅ 할 일·루틴 추가", onPress: () => { setEditRoutine(undefined); setTodoSheetVisible(true); } },
       { text: "💸 지출 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("expense"); setBudgetModalVisible(true); } },
       { text: "💰 수입 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("income"); setBudgetModalVisible(true); } },
       { text: "취소", style: "cancel" },
     ]);
   };
 
-  // 일정 공유 — React Native Share.share()로 텍스트 공유
-  const handleShareSchedule = useCallback((item: ScheduleItem) => {
-    const timeStr = item.time ? ` ${item.time}` : " (종일)";
-    const noteStr = item.note ? `\n메모: ${item.note}` : "";
-    Share.share({
-      title: item.title,
-      message: `📅 ${item.title}\n날짜: ${item.date}${timeStr}${noteStr}`,
-    }).catch(() => {});
+  const handleEditRoutine = useCallback((r: RoutineForDate) => {
+    setEditRoutine({ id: r.id, title: r.title, weekdays: r.weekdays });
+    setTodoSheetVisible(true);
   }, []);
 
-  const selectedDateLabel = (() => {
-    const d = parseDate(selectedDate);
-    const weekday = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
-    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${weekday}요일`;
-  })();
+  const isToday = selectedDate === todayString();
+  const isThisMonth = (() => { const d = new Date(); return year === d.getFullYear() && month === d.getMonth() + 1; })();
+  const todoTotal = selectedTodos.length + selectedRoutines.length;
+  const todoDone = [...selectedTodos, ...selectedRoutines].filter((t) => t.done).length;
+  const totalCount = selectedDateSchedules.length + todoTotal + selectedDateTransactions.length;
 
-  const totalCount = selectedDateSchedules.length + selectedDateTransactions.length;
-
-  // 선택된 날짜 일정·거래 합산 요약
   const dayIncome = selectedDateTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const dayExpense = selectedDateTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      {/* 월 선택 헤더 — 터치 영역을 충분히 확보해 달력 넘김을 쉽게 */}
-      <View style={styles.monthHeader}>
-        <TouchableOpacity onPress={prevMonth} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+      {/* 월 헤더 — 상단 안전 영역만큼 내려서 상태바와 겹치지 않게 (피드백 1번) */}
+      <View style={[styles.monthHeader, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="이전 달">
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>‹</Text>
         </TouchableOpacity>
         <Text style={[styles.monthLabel, { color: colors.text }]}>{year}년 {month}월</Text>
-        <TouchableOpacity onPress={nextMonth} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+        <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="다음 달">
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>›</Text>
+        </TouchableOpacity>
+        {/* 오늘 버튼 — 이미 오늘을 보고 있으면 흐리게 */}
+        <TouchableOpacity
+          onPress={handleGoToday}
+          style={[styles.todayBtn, { borderColor: colors.tint, opacity: isToday && isThisMonth ? 0.4 : 1 }]}
+          disabled={isToday && isThisMonth}
+          accessibilityLabel="오늘로 이동"
+        >
+          <Text style={[styles.todayBtnText, { color: colors.tint }]}>오늘</Text>
         </TouchableOpacity>
       </View>
 
-      {/* 달력 */}
-      <Calendar
-        year={year} month={month} selectedDate={selectedDate}
-        markedDates={markedDates} colors={colors} onSelectDate={selectDate}
+      <MonthCalendar
+        year={year} month={month} selectedDate={selectedDate} marks={marks}
+        onSelectDate={selectDate} onSwipeMonth={changeMonth} colors={colors}
       />
 
-      {/* 선택된 날짜 헤더 */}
-      <View style={[styles.selectedDateBar, { borderTopColor: colors.icon + "20" }]}>
-        <Text style={[styles.selectedDateText, { color: colors.text }]}>{selectedDateLabel}</Text>
-        <Text style={[styles.selectedDateCount, { color: colors.icon }]}>{totalCount}개</Text>
+      {/* 선택한 날짜 바 */}
+      <View style={[styles.selectedDateBar, { borderTopColor: colors.separator }]}>
+        <Text style={[styles.selectedDateText, { color: colors.text }]}>
+          {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
+        </Text>
+        <TouchableOpacity
+          onPress={() => setDetailVisible(true)}
+          style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
+          accessibilityLabel="이 날짜 한눈에 보기"
+        >
+          <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 일정 + 거래 목록 */}
       {isLoaded && totalCount === 0 ? (
         <View style={styles.empty}>
-          <Text style={[styles.emptyText, { color: colors.icon }]}>일정과 거래 내역이 없습니다.</Text>
-          <Text style={[styles.emptyHint, { color: colors.icon }]}>아래 + 버튼으로 추가하세요</Text>
+          <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·할 일·거래 내역이 없습니다.</Text>
+          <Text style={[styles.emptyHint, { color: colors.subtext }]}>아래 + 버튼으로 추가하세요</Text>
         </View>
       ) : (
-        <FlatList
-          data={[...selectedDateSchedules.map((s) => ({ type: "schedule" as const, data: s })),
-                 ...selectedDateTransactions.map((t) => ({ type: "transaction" as const, data: t }))]}
-          keyExtractor={(item) => `${item.type}-${item.data.id}`}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            selectedDateTransactions.length > 0 ? (
-              <View style={[styles.daySummary, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
-                {dayIncome > 0 && <Text style={[styles.daySummaryText, { color: colors.income }]}>수입 +{formatAmount(dayIncome)}</Text>}
-                {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => {
-            if (item.type === "schedule") {
-              const s = item.data as ScheduleItem;
-              return (
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {(dayIncome > 0 || dayExpense > 0) && (
+            <View style={[styles.daySummary, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+              {dayIncome > 0 && <Text style={[styles.daySummaryText, { color: colors.income }]}>수입 +{formatAmount(dayIncome)}</Text>}
+              {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
+            </View>
+          )}
+
+          {selectedDateSchedules.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.subtext }]}>일정</Text>
+              {selectedDateSchedules.map((s) => (
                 <ScheduleRow
-                  item={s} colors={colors}
+                  key={s.id} item={s} date={selectedDate} label={colorLabels[s.color]} colors={colors}
                   onDelete={() => removeSchedule(s.id)}
                   onEdit={() => { setEditSchedule(s); setScheduleModalVisible(true); }}
-                  onShare={() => handleShareSchedule(s)}
                 />
-              );
-            }
-            const t = item.data as Transaction;
-            return (
-              <TransactionRow
-                item={t} colors={colors}
-                onDelete={() => removeTransaction(t.id)}
-                onEdit={() => { setEditTransaction(t); setBudgetModalVisible(true); }}
+              ))}
+            </>
+          )}
+
+          {todoTotal > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.subtext }]}>할 일</Text>
+              <TodoList
+                todos={selectedTodos} routines={selectedRoutines} date={selectedDate}
+                colors={colors} onEditRoutine={handleEditRoutine}
               />
-            );
-          }}
-          ListFooterComponent={() =>
-            totalCount > 0
-              ? <Text style={[styles.hintText, { color: colors.icon }]}>항목을 길게 눌러 수정·삭제·공유</Text>
-              : null
-          }
-        />
+            </>
+          )}
+
+          {selectedDateTransactions.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.subtext }]}>수입·지출</Text>
+              {selectedDateTransactions.map((t) => (
+                <TransactionRow
+                  key={t.id} item={t} colors={colors}
+                  onDelete={() => removeTransaction(t.id)}
+                  onEdit={() => { setEditTransaction(t); setBudgetModalVisible(true); }}
+                />
+              ))}
+            </>
+          )}
+
+          <Text style={[styles.hintText, { color: colors.subtext }]}>항목을 길게 눌러 수정·삭제</Text>
+        </ScrollView>
       )}
 
-      {/* "+ 추가" FAB */}
       <TouchableOpacity style={[styles.fab, { backgroundColor: colors.tint }]} onPress={handleFabPress}>
         <Text style={styles.fabText}>+ 추가</Text>
       </TouchableOpacity>
 
-      {/* 일정 모달 */}
       <ScheduleModal
         visible={scheduleModalVisible}
         initialDate={selectedDate}
         onClose={() => { setScheduleModalVisible(false); setEditSchedule(undefined); }}
-        onAdd={async (s) => {
-          setScheduleModalVisible(false);
-          await addSchedule(s);
-          // 시간이 있는 일정은 10분 전 알림을 예약한다
-          if (s.time) {
-            await scheduleEventNotification(s.title, s.date, s.time);
-          }
-        }}
-        onUpdate={async (s) => {
+        onSubmit={async (s) => {
           setScheduleModalVisible(false);
           if (editSchedule) {
             await updateSchedule(editSchedule.id, s);
+            setEditSchedule(undefined);
+          } else {
+            await addSchedule(s);
+            // 시작 시간이 있는 일정은 첫날 10분 전 알림을 예약한다
+            if (s.time) await scheduleEventNotification(s.title, s.date, s.time);
           }
-          setEditSchedule(undefined);
         }}
         colors={colors}
         initialData={editSchedule}
+        labels={colorLabels}
+        onSaveLabel={saveColorLabel}
       />
 
-      {/* 가계부 모달 */}
       <BudgetModal
         visible={budgetModalVisible}
         initialDate={selectedDate}
         initialType={budgetInitialType}
         onClose={() => { setBudgetModalVisible(false); setEditTransaction(undefined); }}
-        onAdd={async (t) => { setBudgetModalVisible(false); await addTransaction(t); }}
-        onUpdate={async (t) => { setBudgetModalVisible(false); if (editTransaction) await updateTransaction(editTransaction.id, t); setEditTransaction(undefined); }}
+        onSubmit={async (t) => {
+          setBudgetModalVisible(false);
+          if (editTransaction) await updateTransaction(editTransaction.id, t);
+          else await addTransaction(t);
+          setEditTransaction(undefined);
+        }}
         colors={colors}
         initialData={editTransaction}
+      />
+
+      <TodoAddSheet
+        visible={todoSheetVisible}
+        onClose={() => { setTodoSheetVisible(false); setEditRoutine(undefined); }}
+        initialDate={selectedDate}
+        editRoutine={editRoutine}
+        colors={colors}
+      />
+
+      <DayDetailSheet
+        visible={detailVisible}
+        onClose={() => setDetailVisible(false)}
+        date={selectedDate}
+        schedules={selectedDateSchedules}
+        todoCount={todoTotal}
+        doneCount={todoDone}
+        txs={selectedDateTransactions}
+        labels={colorLabels}
+        colors={colors}
       />
     </View>
   );
@@ -715,120 +812,88 @@ export default function ScheduleScreen() {
 
 // ── 스타일 ───────────────────────────────────────────────────
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-// 셀 너비는 7등분, 높이는 너비보다 살짝 크게 → 터치 영역 확보 + 가독성 개선
-const CELL_W = Math.floor((SCREEN_WIDTH - 24) / 7);
-const CELL_H = Math.floor(CELL_W * 1.15);
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   monthHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    paddingTop: 64, paddingHorizontal: 24, paddingBottom: 8, gap: 16,
+    paddingHorizontal: 24, paddingBottom: 8, gap: 12,
   },
-  // 화살표 터치 영역을 충분히 확보 (hitSlop 별도 설정)
-  monthArrow: { padding: 12 },
+  monthArrow: { padding: 8 },
   monthArrowText: { fontSize: 32, fontWeight: "300" },
-  monthLabel: { fontSize: 20, fontWeight: "700", minWidth: 110, textAlign: "center" },
-  // ── 달력 ──────────────────────────────────────────────────
-  calendar: { paddingHorizontal: 12, marginBottom: 4 },
-  weekdayRow: { flexDirection: "row", marginBottom: 4 },
-  weekdayText: { width: CELL_W, textAlign: "center", fontSize: 12, fontWeight: "600" },
-  daysGrid: { flexDirection: "row", flexWrap: "wrap" },
-  // 셀 높이를 너비보다 크게 해 날짜 숫자 + 도트가 여유롭게 배치된다
-  dayCell: { width: CELL_W, height: CELL_H, alignItems: "center", justifyContent: "center" },
-  dayText: { fontSize: 15 },
-  // 오늘 날짜 밑줄 표시 (선택 상태 외)
-  todayDot: { width: 4, height: 4, borderRadius: 2, marginTop: 1 },
-  eventDot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 2 },
+  monthLabel: { fontSize: 20, fontWeight: "700", minWidth: 120, textAlign: "center" },
+  // 월 제목 줄의 세로 가운데에 맞춘 오른쪽 끝 버튼 (제목이 가운데 정렬을 유지하도록 absolute)
+  todayBtn: { position: "absolute", right: 20, bottom: 22, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  todayBtnText: { fontSize: 12, fontWeight: "600" },
   // ── 색상 선택 ─────────────────────────────────────────────
-  colorPicker: { flexDirection: "row", gap: 10, marginBottom: 4, flexWrap: "wrap" },
-  colorChip: {
-    width: 32, height: 32, borderRadius: 16,
-    alignItems: "center", justifyContent: "center",
-  },
+  colorSection: { gap: 6 },
+  colorPicker: { flexDirection: "row", justifyContent: "space-between" },
+  colorItem: { alignItems: "center", gap: 3, width: `${100 / 8}%` },
+  colorChip: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   colorChipSelected: {
-    borderWidth: 2.5,
-    borderColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 3,
+    borderWidth: 2.5, borderColor: "#fff",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
   },
-  colorCheckmark: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  // ── 선택일 헤더 ───────────────────────────────────────────
+  colorCheckmark: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  colorLabel: { fontSize: 10, height: 13 },
+  colorEditLink: { fontSize: 12, fontWeight: "500", paddingVertical: 4 },
+  labelEditor: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
+  labelRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  labelDot: { width: 16, height: 16, borderRadius: 8 },
+  labelInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14 },
+  labelHint: { fontSize: 11, lineHeight: 16 },
+  // ── 선택일 바 ─────────────────────────────────────────────
   selectedDateBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     paddingHorizontal: 24, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth,
   },
   selectedDateText: { fontSize: 15, fontWeight: "600" },
-  selectedDateCount: { fontSize: 13 },
-  // ── 일당 요약 ─────────────────────────────────────────────
-  daySummary: {
-    flexDirection: "row", gap: 12, padding: 12,
-    borderRadius: 12, borderWidth: 1, marginBottom: 8,
-  },
+  detailBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  detailBtnText: { fontSize: 12, fontWeight: "600" },
+  // ── 목록 ──────────────────────────────────────────────────
+  listContent: { paddingHorizontal: 24, paddingBottom: 110, gap: 8 },
+  sectionTitle: { fontSize: 12, fontWeight: "600", letterSpacing: 0.5, marginTop: 6 },
+  daySummary: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
   daySummaryText: { fontSize: 13, fontWeight: "600" },
-  // ── 일정 행 ───────────────────────────────────────────────
-  listContent: { paddingHorizontal: 24, paddingBottom: 100 },
-  scheduleRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 12, paddingLeft: 12,
-    borderLeftWidth: 3, marginBottom: 8, gap: 8,
-  },
+  scheduleRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingLeft: 12, borderLeftWidth: 3, gap: 8 },
   scheduleMain: { flex: 1, gap: 3 },
-  scheduleTitle: { fontSize: 15, fontWeight: "500" },
+  scheduleTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  labelPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  labelPillText: { fontSize: 11, fontWeight: "600" },
+  scheduleTitle: { flexShrink: 1, fontSize: 15, fontWeight: "500" },
   scheduleNote: { fontSize: 12 },
-  scheduleTime: { fontSize: 13, fontWeight: "500" },
-  // ── 거래 행 ───────────────────────────────────────────────
-  txRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10, marginBottom: 2,
-  },
+  scheduleTime: { fontSize: 13, fontWeight: "500", fontVariant: ["tabular-nums"] },
+  txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
   txBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   txBadgeText: { fontSize: 11, fontWeight: "600" },
   txNote: { flex: 1, fontSize: 14 },
-  txAmount: { fontSize: 14, fontWeight: "700" },
-  // ── 빈 상태 ───────────────────────────────────────────────
+  txAmount: { fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingBottom: 100, gap: 6 },
   emptyText: { fontSize: 15 },
   emptyHint: { fontSize: 13 },
+  hintText: { fontSize: 11, textAlign: "center", paddingTop: 8 },
   // ── FAB ───────────────────────────────────────────────────
-  fab: {
-    position: "absolute", bottom: 32, left: 24, right: 24,
-    paddingVertical: 16, borderRadius: 14, alignItems: "center",
-  },
+  fab: { position: "absolute", bottom: 32, left: 24, right: 24, paddingVertical: 16, borderRadius: 14, alignItems: "center" },
   fabText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  hintText: { fontSize: 11, textAlign: "center", paddingTop: 8, paddingBottom: 90 },
-  // ── 모달 공통 ─────────────────────────────────────────────
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "#00000060",
-  },
-  // KeyboardAvoidingView는 flex: 없이 자연스럽게 시트 높이만 차지
-  modalAvoidView: { justifyContent: "flex-end" },
-  modalSheet: {
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: 40, gap: 8,
-  },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#ccc", alignSelf: "center", marginBottom: 8 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  modalTitle: { fontSize: 18, fontWeight: "700" },
-  modalClose: { fontSize: 18, padding: 4 },
-  fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8, marginBottom: 4 },
-  input: {
-    borderWidth: 1, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
-  },
-  submitBtn: { marginTop: 16, paddingVertical: 16, borderRadius: 14, alignItems: "center" },
+  // ── 시트 공통 ─────────────────────────────────────────────
+  fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8 },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: "center" },
   submitBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  // ── 가계부 모달 전용 ──────────────────────────────────────
-  typeToggle: { flexDirection: "row", borderRadius: 10, overflow: "hidden", marginBottom: 4 },
+  typeToggle: { flexDirection: "row", borderRadius: 10, borderWidth: 1, overflow: "hidden", marginBottom: 4 },
   typeBtn: { flex: 1, paddingVertical: 12, alignItems: "center" },
   typeBtnText: { fontSize: 15, fontWeight: "600" },
   categoryList: { gap: 8, paddingVertical: 4 },
   categoryChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   categoryText: { fontSize: 13 },
+  // ── 한눈에 보기 ───────────────────────────────────────────
+  detailCard: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
+  detailHeader: { flexDirection: "row", justifyContent: "space-between" },
+  detailTitle: { fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
+  detailRight: { fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  detailEmpty: { fontSize: 13 },
+  detailLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  detailDot: { width: 8, height: 8, borderRadius: 4 },
+  detailText: { flex: 1, fontSize: 14 },
+  detailMeta: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  detailAmount: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
 });

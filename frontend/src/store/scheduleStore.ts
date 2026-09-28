@@ -1,36 +1,46 @@
 /**
  * 일정 전역 상태 — Zustand store
  *
- * - monthSchedules: 현재 월 전체 일정 (달력 점 표시용)
- * - selectedDate: 선택된 날짜의 일정 목록
- * - 날짜 선택은 DB 재조회 없이 monthSchedules에서 필터링
+ * - monthSchedules: 달력에 보이는 월의 일정 (기간 일정은 걸쳐 있는 모든 달에 포함)
+ * - selectedDateSchedules: 달력에서 선택한 날짜의 일정 (DB 재조회 없이 메모리에서 파생)
+ * - todaySchedules: 홈 '오늘 일정' 전용. 달력에서 다른 달로 넘겨도 바뀌지 않도록
+ *   monthSchedules와 분리해 오늘 날짜로 따로 조회한다.
+ * - colorLabels: 색상별 사용자 이름 (예: 파랑 = 회사)
  */
 
 import { create } from "zustand";
+import { getColorLabels, setColorLabel, type ColorLabels } from "@/src/db/colorLabel";
 import {
   addSchedule,
   deleteSchedule,
   getSchedulesByMonth,
+  getSchedulesOnDate,
   updateSchedule,
   type NewScheduleItem,
   type ScheduleItem,
 } from "@/src/db/schedule";
+import { todayString, toDateStr } from "@/src/utils/date";
+import { occursOn, sortForDate } from "@/src/utils/scheduleText";
 
 // ── 상태 타입 ──────────────────────────────────────────────────
 
 interface ScheduleState {
-  monthSchedules: ScheduleItem[];  // 현재 월 전체 (달력 dot 표시용)
-  selectedDate: string;            // 선택된 날짜 (YYYY-MM-DD)
+  monthSchedules: ScheduleItem[];
+  selectedDate: string;            // YYYY-MM-DD
   year: number;
   month: number;
   isLoaded: boolean;
-
-  // selectedDate의 일정만 걸러낸 뷰 — DB 재조회 없이 메모리에서 파생
   selectedDateSchedules: ScheduleItem[];
+  todaySchedules: ScheduleItem[];
+  colorLabels: ColorLabels;
 
   // 액션
   loadMonth: (year: number, month: number) => Promise<void>;
   selectDate: (date: string) => void;
+  goToday: () => Promise<void>;
+  loadToday: () => Promise<void>;
+  loadColorLabels: () => Promise<void>;
+  saveColorLabel: (color: string, label: string) => Promise<void>;
   add: (s: NewScheduleItem) => Promise<void>;
   update: (id: number, s: Partial<NewScheduleItem>) => Promise<void>;
   remove: (id: number) => Promise<void>;
@@ -39,82 +49,96 @@ interface ScheduleState {
 // ── 헬퍼 ──────────────────────────────────────────────────────
 
 function filterByDate(schedules: ScheduleItem[], date: string): ScheduleItem[] {
-  return schedules.filter((s) => s.date === date);
+  return sortForDate(schedules.filter((s) => occursOn(s, date)), date);
 }
 
 // ── Store ──────────────────────────────────────────────────────
 
 const now = new Date();
-const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-export const useScheduleStore = create<ScheduleState>((set, get) => ({
-  monthSchedules: [],
-  selectedDate: todayStr,
-  year: now.getFullYear(),
-  month: now.getMonth() + 1,
-  isLoaded: false,
-  selectedDateSchedules: [],
-
-  /** 특정 연월 전체 일정을 로드하고 선택일을 해당 월 1일로 초기화한다 */
-  loadMonth: async (year, month) => {
-    const monthSchedules = await getSchedulesByMonth(year, month);
-    const { selectedDate } = get();
-
-    // 월이 바뀌면 선택일도 해당 월 1일로 초기화
-    const newSelectedDate =
-      selectedDate.startsWith(`${year}-${String(month).padStart(2, "0")}`)
-        ? selectedDate
-        : `${year}-${String(month).padStart(2, "0")}-01`;
-
-    set({
-      monthSchedules,
-      year,
-      month,
-      isLoaded: true,
-      selectedDate: newSelectedDate,
-      selectedDateSchedules: filterByDate(monthSchedules, newSelectedDate),
-    });
-  },
-
-  /** 날짜를 선택하고 해당 날짜의 일정 목록을 갱신한다 (DB 재조회 없음) */
-  selectDate: (date) => {
-    const { monthSchedules } = get();
-    set({
-      selectedDate: date,
-      selectedDateSchedules: filterByDate(monthSchedules, date),
-    });
-  },
-
-  /** 일정을 추가하고 현재 월 상태를 갱신한다 */
-  add: async (s) => {
-    await addSchedule(s);
+export const useScheduleStore = create<ScheduleState>((set, get) => {
+  /** 추가·수정·삭제 후 보고 있는 달과 오늘 목록을 모두 새로 고친다 */
+  const refresh = async () => {
     const { year, month, selectedDate } = get();
-    const monthSchedules = await getSchedulesByMonth(year, month);
+    const [monthSchedules, todaySchedules] = await Promise.all([
+      getSchedulesByMonth(year, month),
+      getSchedulesOnDate(todayString()),
+    ]);
     set({
       monthSchedules,
+      todaySchedules,
       selectedDateSchedules: filterByDate(monthSchedules, selectedDate),
     });
-  },
+  };
 
-  /** 일정을 수정하고 현재 월 상태를 갱신한다 */
-  update: async (id, s) => {
-    await updateSchedule(id, s);
-    const { year, month, selectedDate } = get();
-    const monthSchedules = await getSchedulesByMonth(year, month);
-    set({
-      monthSchedules,
-      selectedDateSchedules: filterByDate(monthSchedules, selectedDate),
-    });
-  },
+  return {
+    monthSchedules: [],
+    selectedDate: todayString(),
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+    isLoaded: false,
+    selectedDateSchedules: [],
+    todaySchedules: [],
+    colorLabels: {},
 
-  /** 일정을 삭제하고 현재 월 상태를 갱신한다 */
-  remove: async (id) => {
-    await deleteSchedule(id);
-    const { year, month, selectedDate } = get();
-    const monthSchedules = await getSchedulesByMonth(year, month);
-    set({
-      monthSchedules,
-      selectedDateSchedules: filterByDate(monthSchedules, selectedDate),
-    });
-  },
-}));
+    /** 특정 연월 일정을 로드한다. 선택일이 그 달 밖이면 그 달 1일로 옮긴다 */
+    loadMonth: async (year, month) => {
+      const monthSchedules = await getSchedulesByMonth(year, month);
+      const { selectedDate } = get();
+      const prefix = `${year}-${String(month).padStart(2, "0")}`;
+      const newSelectedDate = selectedDate.startsWith(prefix) ? selectedDate : toDateStr(year, month, 1);
+
+      set({
+        monthSchedules,
+        year,
+        month,
+        isLoaded: true,
+        selectedDate: newSelectedDate,
+        selectedDateSchedules: filterByDate(monthSchedules, newSelectedDate),
+      });
+    },
+
+    /** 날짜를 선택한다 (DB 재조회 없음) */
+    selectDate: (date) => {
+      set({ selectedDate: date, selectedDateSchedules: filterByDate(get().monthSchedules, date) });
+    },
+
+    /** 달력을 이번 달로 돌리고 오늘을 선택한다 */
+    goToday: async () => {
+      const today = todayString();
+      // 선택일을 먼저 오늘로 바꿔 두면 loadMonth가 1일로 덮어쓰지 않는다
+      set({ selectedDate: today });
+      const d = new Date();
+      await get().loadMonth(d.getFullYear(), d.getMonth() + 1);
+    },
+
+    /** 홈 '오늘 일정'을 불러온다 (날짜가 바뀐 뒤 복귀했을 때도 호출) */
+    loadToday: async () => {
+      set({ todaySchedules: await getSchedulesOnDate(todayString()) });
+    },
+
+    loadColorLabels: async () => {
+      set({ colorLabels: await getColorLabels() });
+    },
+
+    saveColorLabel: async (color, label) => {
+      await setColorLabel(color, label);
+      set({ colorLabels: await getColorLabels() });
+    },
+
+    add: async (s) => {
+      await addSchedule(s);
+      await refresh();
+    },
+
+    update: async (id, s) => {
+      await updateSchedule(id, s);
+      await refresh();
+    },
+
+    remove: async (id) => {
+      await deleteSchedule(id);
+      await refresh();
+    },
+  };
+});

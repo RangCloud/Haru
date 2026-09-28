@@ -3,7 +3,12 @@
  *
  * 모든 데이터는 기기 로컬 SQLite에만 저장된다 (외부 전송 금지, CLAUDE.md §4).
  * UI·상태 관리는 store/scheduleStore.ts가 담당한다.
+ *
+ * 기간 일정: date(시작일) ~ end_date(마지막 날). 하루짜리 일정은 end_date가 빈 문자열이다.
+ * 날짜 문자열이 모두 YYYY-MM-DD라서 문자열 비교(<, >=)가 곧 날짜 비교가 된다.
  */
+
+import { sortForDate } from "@/src/utils/scheduleText";
 
 import { getDatabase } from "./database";
 
@@ -12,8 +17,10 @@ import { getDatabase } from "./database";
 export interface ScheduleItem {
   id: number;
   title: string;
-  date: string;        // YYYY-MM-DD
-  time: string;        // HH:MM, 종일이면 ""
+  date: string;        // 시작일 YYYY-MM-DD
+  end_date: string;    // 마지막 날 YYYY-MM-DD, 하루짜리면 ""
+  time: string;        // 시작 시각 HH:MM, 종일이면 ""
+  end_time: string;    // 끝 시각 HH:MM, 정하지 않았으면 ""
   note: string;
   color: string;       // 일정 색상 hex — 기본값 '#6B6EE7'
   created_at: string;  // ISO 8601
@@ -21,22 +28,27 @@ export interface ScheduleItem {
 
 export type NewScheduleItem = Omit<ScheduleItem, "id" | "created_at">;
 
+// 날짜 판정(lastDayOf·occursOn·sortForDate)은 DB와 무관한 순수 계산이라 utils/scheduleText.ts에 둔다
+
 // ── CRUD 함수 ──────────────────────────────────────────────────
 
 /** 새 일정을 추가하고 생성된 id를 반환한다 */
 export async function addSchedule(s: NewScheduleItem): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync(
-    `INSERT INTO schedules (title, date, time, note, color, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [s.title, s.date, s.time, s.note, s.color ?? "#6B6EE7", new Date().toISOString()],
+    `INSERT INTO schedules (title, date, end_date, time, end_time, note, color, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [s.title, s.date, s.end_date, s.time, s.end_time, s.note, s.color ?? "#6B6EE7", new Date().toISOString()],
   );
   return result.lastInsertRowId;
 }
 
 /**
- * 특정 연월의 일정을 날짜순으로 조회한다.
- * LIKE 'YYYY-MM%' 패턴으로 빠르게 필터링한다.
+ * 특정 연월에 "걸쳐 있는" 일정을 모두 조회한다.
+ *
+ * 예) 9/29~10/2 여행은 9월 달력과 10월 달력 양쪽에 나와야 한다.
+ * 조건: 시작일 ≤ 그 달 마지막 날  그리고  마지막 날 ≥ 그 달 1일.
+ * 말일을 '31'로 고정해도 문자열 비교라 30일·28일인 달에서도 정확하다.
  */
 export async function getSchedulesByMonth(
   year: number,
@@ -46,19 +58,23 @@ export async function getSchedulesByMonth(
   const prefix = `${year}-${String(month).padStart(2, "0")}`;
   return db.getAllAsync<ScheduleItem>(
     `SELECT * FROM schedules
-     WHERE date LIKE ?
+     WHERE date <= ?
+       AND (CASE WHEN end_date = '' THEN date ELSE end_date END) >= ?
      ORDER BY date ASC, time ASC`,
-    [`${prefix}%`],
+    [`${prefix}-31`, `${prefix}-01`],
   );
 }
 
-/** 특정 날짜의 일정만 조회한다 (달력 날짜 탭 시 사용) */
-export async function getSchedulesByDate(date: string): Promise<ScheduleItem[]> {
+/** 특정 날짜에 걸쳐 있는 일정만 조회한다 (홈 '오늘 일정'·위젯용) */
+export async function getSchedulesOnDate(date: string): Promise<ScheduleItem[]> {
   const db = await getDatabase();
-  return db.getAllAsync<ScheduleItem>(
-    `SELECT * FROM schedules WHERE date = ? ORDER BY time ASC`,
-    [date],
+  const rows = await db.getAllAsync<ScheduleItem>(
+    `SELECT * FROM schedules
+     WHERE date <= ?
+       AND (CASE WHEN end_date = '' THEN date ELSE end_date END) >= ?`,
+    [date, date],
   );
+  return sortForDate(rows, date);
 }
 
 /** 일정을 삭제한다 */
@@ -69,21 +85,25 @@ export async function deleteSchedule(id: number): Promise<void> {
 
 /**
  * 일정을 수정한다.
- * 변경할 필드만 동적으로 업데이트한다.
+ * 변경할 필드만 동적으로 업데이트한다. 컬럼 이름은 아래 목록에서만 가져오므로
+ * SQL 문자열에 외부 입력이 섞이지 않는다 (값은 모두 ? 바인딩).
  */
 export async function updateSchedule(
   id: number,
   s: Partial<NewScheduleItem>,
 ): Promise<void> {
   const db = await getDatabase();
+  const columns = ["title", "date", "end_date", "time", "end_time", "note", "color"] as const;
   const fields: string[] = [];
   const values: (string | number)[] = [];
 
-  if (s.title !== undefined) { fields.push("title = ?"); values.push(s.title); }
-  if (s.date !== undefined)  { fields.push("date = ?");  values.push(s.date); }
-  if (s.time !== undefined)  { fields.push("time = ?");  values.push(s.time); }
-  if (s.note !== undefined)  { fields.push("note = ?");  values.push(s.note); }
-  if (s.color !== undefined) { fields.push("color = ?"); values.push(s.color); }
+  for (const col of columns) {
+    const v = s[col];
+    if (v !== undefined) {
+      fields.push(`${col} = ?`);
+      values.push(v);
+    }
+  }
 
   if (fields.length === 0) return;
   values.push(id);

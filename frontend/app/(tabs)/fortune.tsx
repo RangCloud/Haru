@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -32,6 +33,7 @@ function BirthInfoForm({
   colors: typeof Colors.light;
   onSave: (info: BirthInfo) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [year, setYear] = useState("");
   const [month, setMonth] = useState("");
   const [monthType, setMonthType] = useState<"solar" | "lunar">("solar");
@@ -70,7 +72,8 @@ function BirthInfoForm({
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={styles.formContainer}
+      // 고정 72 대신 기기별 상태바·노치 높이 + 24 (피드백 1번)
+      contentContainerStyle={[styles.formContainer, { paddingTop: insets.top + 24 }]}
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.formEmoji}>🔮</Text>
@@ -198,6 +201,7 @@ function FortuneCard({
   colors: typeof Colors.light;
   onReset: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const monthTypeLabel = birthInfo.monthType === "solar" ? "양력" : "음력";
   const hourLabel = birthInfo.hour !== null ? `${birthInfo.hour}시생` : "";
   const birthLabel = `${birthInfo.year}년 ${birthInfo.month}월(${monthTypeLabel}) ${birthInfo.day}일${hourLabel ? " " + hourLabel : ""}`;
@@ -205,7 +209,7 @@ function FortuneCard({
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={styles.fortuneContainer}
+      contentContainerStyle={[styles.fortuneContainer, { paddingTop: insets.top + 24 }]}
     >
       <Text style={[styles.fortuneScreenTitle, { color: colors.text }]}>오늘의 운세 🔮</Text>
       <Text style={[styles.fortuneBirthLabel, { color: colors.subtext }]}>{birthLabel}</Text>
@@ -321,7 +325,6 @@ const styles = StyleSheet.create({
   // ── 입력 폼 ──────────────────────────────────────────────────
   formContainer: {
     padding: 24,
-    paddingTop: 72,
     alignItems: "center",
     gap: 4,
   },
@@ -365,7 +368,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   // ── 운세 카드 ─────────────────────────────────────────────────
-  fortuneContainer: { padding: 24, paddingTop: 72, gap: 12 },
+  fortuneContainer: { padding: 24, gap: 12 },
   fortuneScreenTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5 },
   fortuneBirthLabel: { fontSize: 13, marginBottom: 4 },
   fortuneCard: {

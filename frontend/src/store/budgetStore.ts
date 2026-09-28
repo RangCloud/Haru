@@ -31,8 +31,13 @@ interface BudgetState {
   totalExpense: number;
   balance: number;
 
+  // 홈 '이번 달' 카드 전용 합계 — 일정 탭에서 다른 달로 넘겨도 바뀌지 않도록 따로 관리
+  thisMonthIncome: number;
+  thisMonthExpense: number;
+
   // 액션
   loadMonth: (year: number, month: number) => Promise<void>;
+  loadThisMonth: () => Promise<void>;
   add: (t: NewTransaction) => Promise<void>;
   update: (id: number, t: Partial<NewTransaction>) => Promise<void>;
   remove: (id: number) => Promise<void>;
@@ -54,42 +59,56 @@ function calcSummary(transactions: Transaction[]) {
 
 const now = new Date();
 
-export const useBudgetStore = create<BudgetState>((set, get) => ({
-  transactions: [],
-  year: now.getFullYear(),
-  month: now.getMonth() + 1,
-  isLoaded: false,
-  totalIncome: 0,
-  totalExpense: 0,
-  balance: 0,
+/** 오늘이 속한 달의 수입·지출 합계 */
+async function thisMonthSummary() {
+  const d = new Date();
+  const { totalIncome, totalExpense } = calcSummary(await getTransactionsByMonth(d.getFullYear(), d.getMonth() + 1));
+  return { thisMonthIncome: totalIncome, thisMonthExpense: totalExpense };
+}
 
-  /** 특정 연월 데이터를 DB에서 불러와 상태를 교체한다 */
-  loadMonth: async (year, month) => {
-    const transactions = await getTransactionsByMonth(year, month);
-    set({ transactions, year, month, isLoaded: true, ...calcSummary(transactions) });
-  },
-
-  /** 거래를 추가하고 현재 월 상태를 갱신한다 */
-  add: async (t) => {
-    await addTransaction(t);
+export const useBudgetStore = create<BudgetState>((set, get) => {
+  /** 추가·수정·삭제 후 보고 있는 달과 홈 '이번 달' 합계를 함께 갱신한다 */
+  const refresh = async () => {
     const { year, month } = get();
-    const transactions = await getTransactionsByMonth(year, month);
-    set({ transactions, ...calcSummary(transactions) });
-  },
+    const [transactions, summary] = await Promise.all([getTransactionsByMonth(year, month), thisMonthSummary()]);
+    set({ transactions, ...calcSummary(transactions), ...summary });
+  };
 
-  /** 거래를 수정하고 현재 월 상태를 갱신한다 */
-  update: async (id, t) => {
-    await updateTransaction(id, t);
-    const { year, month } = get();
-    const transactions = await getTransactionsByMonth(year, month);
-    set({ transactions, ...calcSummary(transactions) });
-  },
+  return {
+    transactions: [],
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+    isLoaded: false,
+    totalIncome: 0,
+    totalExpense: 0,
+    balance: 0,
+    thisMonthIncome: 0,
+    thisMonthExpense: 0,
 
-  /** 거래를 삭제하고 현재 월 상태를 갱신한다 */
-  remove: async (id) => {
-    await deleteTransaction(id);
-    const { year, month } = get();
-    const transactions = await getTransactionsByMonth(year, month);
-    set({ transactions, ...calcSummary(transactions) });
-  },
-}));
+    /** 특정 연월 데이터를 DB에서 불러와 상태를 교체한다 (일정 탭 달력용) */
+    loadMonth: async (year, month) => {
+      const transactions = await getTransactionsByMonth(year, month);
+      set({ transactions, year, month, isLoaded: true, ...calcSummary(transactions) });
+    },
+
+    /** 홈 '이번 달' 합계를 불러온다 (달이 바뀐 뒤 복귀했을 때도 호출) */
+    loadThisMonth: async () => {
+      set(await thisMonthSummary());
+    },
+
+    add: async (t) => {
+      await addTransaction(t);
+      await refresh();
+    },
+
+    update: async (id, t) => {
+      await updateTransaction(id, t);
+      await refresh();
+    },
+
+    remove: async (id) => {
+      await deleteTransaction(id);
+      await refresh();
+    },
+  };
+});

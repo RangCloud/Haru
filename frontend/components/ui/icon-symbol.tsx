@@ -24,6 +24,13 @@ const MAPPING = {
   "wonsign.circle.fill": "account-balance-wallet",
   "calendar": "event",
   "ellipsis.circle.fill": "more-horiz",
+  // 운세·뉴스·친구 탭 — Android에서 매핑이 없으면 아이콘이 표시되지 않는다
+  "sparkles": "auto-awesome",
+  "newspaper.fill": "newspaper",
+  "person.2.fill": "people",
+  // 할 일 중요 표시·뉴스 새로고침
+  "star.fill": "star",
+  "arrow.clockwise": "refresh",
   // 테마 토글
   "moon.fill": "bedtime",
   "sun.max.fill": "wb-sunny",

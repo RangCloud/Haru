@@ -1,7 +1,7 @@
 /**
  * 홈 화면
  * 날씨 위젯(우상단) + 오늘 일정 → 투두리스트 → 이달 가계부 요약
- * 톱니바퀴(⚙) 탭 → 설정 모달 (테마·계정·로그아웃)
+ * 톱니바퀴(⚙) 탭 → 설정 시트 (테마·시작 화면·계정·로그아웃)
  */
 
 import { router } from "expo-router";
@@ -9,8 +9,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
-  Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,16 +16,24 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { BottomSheet } from "@/src/components/BottomSheet";
+import { TodoAddSheet } from "@/src/components/TodoAddSheet";
+import { TodoList } from "@/src/components/TodoList";
+import { type RoutineForDate } from "@/src/db/routine";
+import { type ScheduleItem } from "@/src/db/schedule";
 import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
+import { START_TAB_OPTIONS, useSettingsStore } from "@/src/store/settingsStore";
 import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
 import { requestNotificationPermission } from "@/src/utils/notifications";
+import { timeLabelOn } from "@/src/utils/scheduleText";
 import { writeWidgetData } from "@/src/utils/widgetData";
 
 // ── 유틸 ─────────────────────────────────────────────────────
@@ -70,6 +76,7 @@ function SettingsModal({
   colors: typeof Colors.light;
 }) {
   const { mode, setMode } = useThemeStore();
+  const { startTab, setStartTab } = useSettingsStore();
   const { user, signOut } = useAuthStore();
 
   const handleSignOut = () => {
@@ -87,79 +94,85 @@ function SettingsModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      {/* 배경 탭 → 닫기 */}
-      <Pressable style={settingStyles.overlay} onPress={onClose}>
-        {/* 시트 내부 탭은 닫기 차단 */}
-        <Pressable style={settingStyles.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={[settingStyles.sheetInner, { backgroundColor: colors.background }]}>
-            {/* 핸들 바 */}
-            <View style={[settingStyles.handle, { backgroundColor: colors.separator }]} />
+    // 공용 바텀시트 — 항목이 늘어도 상태바를 넘지 않고 시트 안에서 스크롤된다 (피드백 1번)
+    <BottomSheet visible={visible} onClose={onClose} title="설정" colors={colors}>
+      {/* 화면 테마 */}
+      <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>화면 테마</Text>
+      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {THEME_ORDER.map((m, i) => (
+          <TouchableOpacity
+            key={m}
+            style={[
+              settingStyles.segment,
+              mode === m && { backgroundColor: colors.tint },
+              i < THEME_ORDER.length - 1 && settingStyles.segmentBorder,
+              i < THEME_ORDER.length - 1 && { borderColor: colors.separator },
+            ]}
+            onPress={() => setMode(m)}
+          >
+            <Text style={settingStyles.segmentIcon}>{THEME_ICON[m]}</Text>
+            <Text style={[settingStyles.segmentLabel, { color: mode === m ? "#fff" : colors.subtext }]}>
+              {THEME_LABEL[m]}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-            {/* 헤더 */}
-            <View style={settingStyles.sheetHeader}>
-              <Text style={[settingStyles.sheetTitle, { color: colors.text }]}>설정</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={[settingStyles.closeBtn, { color: colors.subtext }]}>✕</Text>
-              </TouchableOpacity>
-            </View>
+      {/* 시작 화면 (피드백 17번) — 앱을 새로 켤 때 먼저 보여줄 탭 */}
+      <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>시작 화면</Text>
+      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {START_TAB_OPTIONS.map((opt, i) => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[
+              settingStyles.segment,
+              settingStyles.segmentCompact,
+              startTab === opt.value && { backgroundColor: colors.tint },
+              i < START_TAB_OPTIONS.length - 1 && settingStyles.segmentBorder,
+              i < START_TAB_OPTIONS.length - 1 && { borderColor: colors.separator },
+            ]}
+            onPress={() => setStartTab(opt.value)}
+            accessibilityState={{ selected: startTab === opt.value }}
+          >
+            <Text style={[settingStyles.segmentLabel, { color: startTab === opt.value ? "#fff" : colors.subtext }]}>
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={[settingStyles.hint, { color: colors.subtext }]}>앱을 다시 실행할 때부터 적용됩니다.</Text>
 
-            {/* 화면 테마 */}
-            <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>화면 테마</Text>
-            <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-              {THEME_ORDER.map((m, i) => (
-                <TouchableOpacity
-                  key={m}
-                  style={[
-                    settingStyles.segment,
-                    mode === m && { backgroundColor: colors.tint },
-                    i < THEME_ORDER.length - 1 && settingStyles.segmentBorder,
-                    i < THEME_ORDER.length - 1 && { borderColor: colors.separator },
-                  ]}
-                  onPress={() => setMode(m)}
-                >
-                  <Text style={settingStyles.segmentIcon}>{THEME_ICON[m]}</Text>
-                  <Text style={[settingStyles.segmentLabel, { color: mode === m ? "#fff" : colors.subtext }]}>
-                    {THEME_LABEL[m]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* 계정 */}
-            <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>계정</Text>
-            <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-              <View style={settingStyles.listRow}>
-                <Text style={settingStyles.listIcon}>👤</Text>
-                <View style={settingStyles.listContent}>
-                  <Text style={[settingStyles.listLabel, { color: colors.text }]}>{user?.name ?? "게스트"}</Text>
-                  <Text style={[settingStyles.listSub, { color: colors.subtext }]}>
-                    {user?.email ?? "게스트 모드로 이용 중"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* 앱 정보 */}
-            <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>앱 정보</Text>
-            <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-              <View style={settingStyles.listRow}>
-                <Text style={[settingStyles.listLabel, { color: colors.text }]}>버전</Text>
-                <Text style={[settingStyles.listValue, { color: colors.subtext }]}>1.0.0</Text>
-              </View>
-            </View>
-
-            {/* 로그아웃 */}
-            <TouchableOpacity
-              style={[settingStyles.logoutBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-              onPress={handleSignOut}
-            >
-              <Text style={[settingStyles.logoutText, { color: colors.expense }]}>로그아웃</Text>
-            </TouchableOpacity>
+      {/* 계정 */}
+      <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>계정</Text>
+      <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <View style={settingStyles.listRow}>
+          <Text style={settingStyles.listIcon}>👤</Text>
+          <View style={settingStyles.listContent}>
+            <Text style={[settingStyles.listLabel, { color: colors.text }]}>{user?.name ?? "게스트"}</Text>
+            <Text style={[settingStyles.listSub, { color: colors.subtext }]}>
+              {user?.email ?? "게스트 모드로 이용 중"}
+            </Text>
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </View>
+      </View>
+
+      {/* 앱 정보 */}
+      <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>앱 정보</Text>
+      <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <View style={settingStyles.listRow}>
+          <Text style={[settingStyles.listLabel, { color: colors.text }]}>버전</Text>
+          <Text style={[settingStyles.listValue, { color: colors.subtext }]}>1.0.0</Text>
+        </View>
+      </View>
+
+      {/* 로그아웃 */}
+      <TouchableOpacity
+        style={[settingStyles.logoutBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+        onPress={handleSignOut}
+      >
+        <Text style={[settingStyles.logoutText, { color: colors.expense }]}>로그아웃</Text>
+      </TouchableOpacity>
+    </BottomSheet>
   );
 }
 
@@ -223,10 +236,11 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
 
 // ── 가계부 요약 카드 ──────────────────────────────────────────
 
+// 피드백 11번: 잔액 대신 수입 총액·지출 총액 두 가지만 크게 보여준다
 function BudgetSummaryCard({
-  income, expense, balance, colors,
+  income, expense, colors,
 }: {
-  income: number; expense: number; balance: number;
+  income: number; expense: number;
   colors: typeof Colors.light;
 }) {
   return (
@@ -241,20 +255,13 @@ function BudgetSummaryCard({
       </View>
       <View style={styles.budgetRow}>
         <View style={styles.budgetItem}>
-          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>수입</Text>
+          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>수입 총액</Text>
           <Text style={[styles.budgetValue, { color: colors.income }]}>{formatAmount(income)}</Text>
         </View>
         <View style={[styles.budgetDivider, { backgroundColor: colors.separator }]} />
         <View style={styles.budgetItem}>
-          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>지출</Text>
+          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>지출 총액</Text>
           <Text style={[styles.budgetValue, { color: colors.expense }]}>{formatAmount(expense)}</Text>
-        </View>
-        <View style={[styles.budgetDivider, { backgroundColor: colors.separator }]} />
-        <View style={styles.budgetItem}>
-          <Text style={[styles.budgetCaption, { color: colors.subtext }]}>잔액</Text>
-          <Text style={[styles.budgetValue, { color: balance >= 0 ? colors.tint : colors.expense }]}>
-            {formatAmount(balance)}
-          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -264,9 +271,10 @@ function BudgetSummaryCard({
 // ── 오늘 일정 카드 ────────────────────────────────────────────
 
 function TodayScheduleCard({
-  schedules, colors,
+  schedules, today, colors,
 }: {
-  schedules: { id: number; title: string; time: string; color?: string }[];
+  schedules: ScheduleItem[];
+  today: string;
   colors: typeof Colors.light;
 }) {
   const preview = schedules.slice(0, 3);
@@ -292,7 +300,7 @@ function TodayScheduleCard({
                 {s.title}
               </Text>
               <Text style={[styles.scheduleTime, { color: colors.subtext }]}>
-                {s.time || "종일"}
+                {timeLabelOn(s, today)}
               </Text>
             </View>
           ))}
@@ -310,12 +318,16 @@ function TodayScheduleCard({
 // ── 투두리스트 카드 ───────────────────────────────────────────
 
 function TodoCard({ colors }: { colors: typeof Colors.light }) {
-  const { todos, add, toggle, remove, isLoaded } = useTodoStore();
+  const { todos, routines, add, isLoaded } = useTodoStore();
   const [input, setInput] = useState("");
   const inputRef = useRef<TextInput>(null);
+  // 날짜 지정·루틴 추가 시트 (피드백 2번·18번)
+  const [sheet, setSheet] = useState<{ mode: "todo" | "routine"; editRoutine?: { id: number; title: string; weekdays: string } } | null>(null);
 
-  const doneCount = todos.filter((t) => t.done).length;
+  const all = [...routines, ...todos];
+  const doneCount = all.filter((t) => t.done).length;
 
+  // 입력칸에 바로 쓰고 엔터 → 오늘 할 일로 빠르게 추가 (기존 사용 방식 유지)
   const handleAdd = async () => {
     const trimmed = input.trim();
     if (!trimmed) return;
@@ -327,61 +339,36 @@ function TodoCard({ colors }: { colors: typeof Colors.light }) {
     }
   };
 
-  const handleLongPress = (id: number, title: string) => {
-    Alert.alert("할 일 삭제", `"${title}"을(를) 삭제할까요?`, [
-      { text: "취소", style: "cancel" },
-      { text: "삭제", style: "destructive", onPress: () => remove(id) },
-    ]);
-  };
+  const handleEditRoutine = (r: RoutineForDate) =>
+    setSheet({ mode: "routine", editRoutine: { id: r.id, title: r.title, weekdays: r.weekdays } });
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
       <View style={styles.cardHeader}>
         <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 할 일</Text>
-        {todos.length > 0 && (
+        {all.length > 0 && (
           <Text style={[styles.todoBadge, { color: colors.subtext }]}>
-            {doneCount}/{todos.length}
+            {doneCount}/{all.length}
           </Text>
         )}
       </View>
 
-      {/* 투두 목록 */}
-      {isLoaded && todos.length === 0 ? (
+      {isLoaded && all.length === 0 ? (
         <Text style={[styles.emptyText, { color: colors.subtext }]}>할 일을 추가해보세요.</Text>
       ) : (
-        todos.map((t) => (
-          <TouchableOpacity
-            key={t.id}
-            style={styles.todoItem}
-            onPress={() => toggle(t.id, !t.done)}
-            onLongPress={() => handleLongPress(t.id, t.title)}
-            activeOpacity={0.7}
-          >
-            {/* 체크박스 */}
-            <View style={[
-              styles.checkbox,
-              { borderColor: t.done ? colors.tint : colors.separator },
-              t.done && { backgroundColor: colors.tint },
-            ]}>
-              {t.done && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={[
-              styles.todoTitle,
-              { color: t.done ? colors.subtext : colors.text },
-              t.done && styles.todoTitleDone,
-            ]} numberOfLines={1}>
-              {t.title}
-            </Text>
-          </TouchableOpacity>
-        ))
+        <TodoList todos={todos} routines={routines} date={todayString()} colors={colors} onEditRoutine={handleEditRoutine} />
       )}
 
-      {/* 입력창 */}
+      {all.length > 0 && (
+        <Text style={[styles.todoHint, { color: colors.subtext }]}>길게 눌러 ★ 중요 표시·삭제</Text>
+      )}
+
+      {/* 입력창 + 날짜 지정·루틴 버튼 */}
       <View style={[styles.todoInputRow, { borderTopColor: colors.separator }]}>
         <TextInput
           ref={inputRef}
           style={[styles.todoInput, { color: colors.text }]}
-          placeholder="+ 할 일 추가"
+          placeholder="+ 오늘 할 일 추가"
           placeholderTextColor={colors.subtext}
           value={input}
           onChangeText={setInput}
@@ -389,12 +376,37 @@ function TodoCard({ colors }: { colors: typeof Colors.light }) {
           returnKeyType="done"
           blurOnSubmit={false}
         />
-        {input.trim().length > 0 && (
+        {input.trim().length > 0 ? (
           <TouchableOpacity onPress={handleAdd} style={styles.todoAddBtn}>
             <Text style={[styles.todoAddText, { color: colors.tint }]}>추가</Text>
           </TouchableOpacity>
+        ) : (
+          <View style={styles.todoTools}>
+            <TouchableOpacity
+              onPress={() => setSheet({ mode: "todo" })}
+              style={[styles.todoTool, { backgroundColor: colors.tintLight }]}
+              accessibilityLabel="날짜를 정해서 할 일 추가"
+            >
+              <Text style={[styles.todoToolText, { color: colors.tint }]}>📅 날짜</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSheet({ mode: "routine" })}
+              style={[styles.todoTool, { backgroundColor: colors.tintLight }]}
+              accessibilityLabel="고정 루틴 추가"
+            >
+              <Text style={[styles.todoToolText, { color: colors.tint }]}>↻ 루틴</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
+
+      <TodoAddSheet
+        visible={sheet !== null}
+        onClose={() => setSheet(null)}
+        initialMode={sheet?.mode}
+        editRoutine={sheet?.editRoutine}
+        colors={colors}
+      />
     </View>
   );
 }
@@ -405,9 +417,11 @@ export default function HomeScreen() {
   const scheme = useColorScheme();
   const colors = Colors[scheme];
 
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { totalIncome, totalExpense, balance, loadMonth } = useBudgetStore();
-  const { monthSchedules, loadMonth: loadScheduleMonth } = useScheduleStore();
+  // 홈은 항상 "이번 달·오늘" 기준 — 일정 탭에서 다른 달로 넘겨도 영향받지 않는 전용 값을 쓴다
+  const { thisMonthIncome, thisMonthExpense, loadThisMonth } = useBudgetStore();
+  const { todaySchedules, loadToday } = useScheduleStore();
   const { load: loadTodos } = useTodoStore();
 
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -415,33 +429,30 @@ export default function HomeScreen() {
   const lastActiveDateRef = useRef(todayString());
 
   useEffect(() => {
-    const now = new Date();
-    loadMonth(now.getFullYear(), now.getMonth() + 1);
-    loadScheduleMonth(now.getFullYear(), now.getMonth() + 1);
+    loadThisMonth();
+    loadToday();
     loadTodos();
 
     // 알림 권한 요청 — 앱 최초 실행 시 권한 팝업이 표시된다
     requestNotificationPermission();
 
-    // 백그라운드→포그라운드 복귀 시 날짜 변경 감지 후 데이터 갱신
+    // 백그라운드→포그라운드 복귀 시: 할 일은 항상 새로 읽고, 날짜가 바뀌었으면 오늘 일정·이번 달 합계도 갱신
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        const current = new Date();
-        const currentDate = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+        const currentDate = todayString();
         loadTodos();
         if (currentDate !== lastActiveDateRef.current) {
-          loadMonth(current.getFullYear(), current.getMonth() + 1);
-          loadScheduleMonth(current.getFullYear(), current.getMonth() + 1);
+          loadThisMonth();
+          loadToday();
           lastActiveDateRef.current = currentDate;
         }
       }
     });
     return () => sub.remove();
     // Zustand store 액션은 안정적 참조 — 의존성에 포함해도 무한 루프 없음
-  }, [loadMonth, loadScheduleMonth, loadTodos]);
+  }, [loadThisMonth, loadToday, loadTodos]);
 
   const today = todayString();
-  const todaySchedules = monthSchedules.filter((s) => s.date === today);
 
   // 위젯 데이터 갱신 — 일정이나 날씨가 바뀔 때마다 파일에 기록
   const { current: weatherCurrent, usingFallback } = useWeatherStore();
@@ -465,7 +476,8 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
+      // 상단 여백을 기기별 상태바·노치 높이에 맞춘다 (고정 64 → 안전 영역 + 16, 피드백 1번)
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
       keyboardShouldPersistTaps="handled"
     >
       {/* 헤더 */}
@@ -491,12 +503,12 @@ export default function HomeScreen() {
 
       {/* 오늘 일정을 최상단에 배치 — 당일 할 일을 가장 먼저 확인 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘</Text>
-      <TodayScheduleCard schedules={todaySchedules} colors={colors} />
+      <TodayScheduleCard schedules={todaySchedules} today={today} colors={colors} />
       <TodoCard colors={colors} />
 
       {/* 가계부 요약 — 일정·할 일보다 부차적인 정보 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>이번 달</Text>
-      <BudgetSummaryCard income={totalIncome} expense={totalExpense} balance={balance} colors={colors} />
+      <BudgetSummaryCard income={thisMonthIncome} expense={thisMonthExpense} colors={colors} />
 
       {/* 설정 모달 */}
       <SettingsModal
@@ -565,23 +577,10 @@ const styles = StyleSheet.create({
   moreText: { fontSize: 13, fontWeight: "500" },
   // ── 투두 ──────────────────────────────────────────────────
   todoBadge: { fontSize: 12 },
-  todoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 2,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkmark: { fontSize: 13, color: "#fff", fontWeight: "700" },
-  todoTitle: { flex: 1, fontSize: 14 },
-  todoTitleDone: { textDecorationLine: "line-through" },
+  todoHint: { fontSize: 11, marginTop: -4 },
+  todoTools: { flexDirection: "row", gap: 6 },
+  todoTool: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
+  todoToolText: { fontSize: 12, fontWeight: "600" },
   todoInputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -598,37 +597,6 @@ const styles = StyleSheet.create({
 // ── 설정 모달 스타일 (바텀 시트) ─────────────────────────────
 
 const settingStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "#00000060",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    width: "100%",
-  },
-  sheetInner: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 12,
-    gap: 10,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 12,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sheetTitle: { fontSize: 20, fontWeight: "700" },
-  closeBtn: { fontSize: 18 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "600",
@@ -654,6 +622,9 @@ const settingStyles = StyleSheet.create({
   segmentBorder: {
     borderRightWidth: 1,
   },
+  // 시작 화면 선택은 아이콘 없이 글자만 — 높이를 줄인다
+  segmentCompact: { paddingVertical: 10 },
+  hint: { fontSize: 11, marginLeft: 4, marginTop: -2 },
   segmentIcon: { fontSize: 18 },
   segmentLabel: { fontSize: 12, fontWeight: "500" },
   // 리스트 카드 공통
