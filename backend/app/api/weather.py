@@ -36,8 +36,8 @@ async def fetch_weather(
     except ValueError as e:
         # 기상청 API 오류 또는 응답 파싱 실패
         raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        # httpx 예외 메시지에는 authKey가 포함된 요청 URL 전체가 들어 있다.
+    except (httpx.HTTPError, KeyError, TypeError) as e:
+        # 네트워크 오류·기상청 응답 형식 오류만 잡는다. httpx 예외 메시지에는 authKey가 포함된 요청 URL 전체가 들어 있다.
         # 응답은 물론 서버 로그에도 키가 남지 않도록 예외 종류와 HTTP 상태 코드만 기록한다.
         # 개인정보처리방침상 위치는 조회에만 쓰므로 좌표(lat/lon)도 기록하지 않는다.
         status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else "-"

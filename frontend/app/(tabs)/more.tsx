@@ -80,7 +80,7 @@ export default function MoreScreen() {
 
   const load = useCallback(async () => {
     setNewsError(null);
-    const [newsResult] = await Promise.allSettled([fetchNews("오늘 뉴스", 10)]);
+    const [newsResult] = await Promise.allSettled([fetchNews("all", 10)]);
 
     if (newsResult.status === "fulfilled") {
       setNews(newsResult.value.items);

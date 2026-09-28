@@ -19,7 +19,23 @@ export interface NewsItem {
   pub_date: string;   // 발행일 문자열
 }
 
+// 백엔드 app/schemas/news.py의 NewsCategory와 같은 목록이어야 한다 (다른 값은 422로 거절됨)
+export type NewsCategory =
+  | "all" | "politics" | "economy" | "society" | "it" | "culture" | "sports" | "entertainment";
+
+export const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "politics", label: "정치" },
+  { value: "economy", label: "경제" },
+  { value: "society", label: "사회" },
+  { value: "it", label: "IT·과학" },
+  { value: "culture", label: "생활·문화" },
+  { value: "sports", label: "스포츠" },
+  { value: "entertainment", label: "연예" },
+];
+
 export interface NewsData {
+  category: NewsCategory;
   keyword: string;
   total: number;
   items: NewsItem[];
@@ -28,10 +44,10 @@ export interface NewsData {
 // ── API 호출 ─────────────────────────────────────────────────
 
 export async function fetchNews(
-  keyword = "오늘 뉴스",
+  category: NewsCategory = "all",
   display = 10,
 ): Promise<NewsData> {
-  const url = `${API_BASE}/api/news?keyword=${encodeURIComponent(keyword)}&display=${display}`;
+  const url = `${API_BASE}/api/news?category=${category}&display=${display}`;
 
   // 10초 초과 시 취소 — 네이버 API 지연 시 뉴스 카드가 무한 로딩되는 현상 방지
   const controller = new AbortController();

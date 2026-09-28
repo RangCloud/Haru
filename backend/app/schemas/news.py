@@ -4,7 +4,13 @@
 저작권 준수: 뉴스 본문은 보관하지 않고 헤드라인·요약·출처 링크만 다룬다.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel
+
+# 앱이 고를 수 있는 뉴스 카테고리 — 이 목록 밖의 값은 FastAPI가 422로 거절한다.
+# 임의 검색어를 받지 않아 네이버 API 호출량 남용과 캐시 키 폭증을 막는다.
+NewsCategory = Literal["all", "politics", "economy", "society", "it", "culture", "sports", "entertainment"]
 
 
 class NewsItem(BaseModel):
@@ -15,6 +21,7 @@ class NewsItem(BaseModel):
 
 
 class NewsResponse(BaseModel):
-    keyword: str            # 검색어 (예: "오늘 뉴스")
+    category: NewsCategory  # 요청한 카테고리
+    keyword: str            # 실제로 네이버에 보낸 검색어 (예: "오늘 뉴스")
     total: int              # 네이버 API가 반환한 전체 결과 수
     items: list[NewsItem]   # 실제 반환된 기사 목록
