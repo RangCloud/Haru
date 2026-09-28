@@ -37,6 +37,7 @@ interface ScheduleState {
   // 액션
   loadMonth: (year: number, month: number) => Promise<void>;
   selectDate: (date: string) => void;
+  goToDate: (date: string) => Promise<void>;
   goToday: () => Promise<void>;
   loadToday: () => Promise<void>;
   loadColorLabels: () => Promise<void>;
@@ -103,13 +104,17 @@ export const useScheduleStore = create<ScheduleState>((set, get) => {
       set({ selectedDate: date, selectedDateSchedules: filterByDate(get().monthSchedules, date) });
     },
 
+    /** 달력을 특정 날짜가 있는 달로 옮기고 그 날짜를 선택한다 */
+    goToDate: async (date) => {
+      // 선택일을 먼저 바꿔 두면 loadMonth가 그 달 1일로 덮어쓰지 않는다
+      set({ selectedDate: date });
+      const [y, m] = date.split("-").map(Number);
+      await get().loadMonth(y, m);
+    },
+
     /** 달력을 이번 달로 돌리고 오늘을 선택한다 */
     goToday: async () => {
-      const today = todayString();
-      // 선택일을 먼저 오늘로 바꿔 두면 loadMonth가 1일로 덮어쓰지 않는다
-      set({ selectedDate: today });
-      const d = new Date();
-      await get().loadMonth(d.getFullYear(), d.getMonth() + 1);
+      await get().goToDate(todayString());
     },
 
     /** 홈 '오늘 일정'을 불러온다 (날짜가 바뀐 뒤 복귀했을 때도 호출) */

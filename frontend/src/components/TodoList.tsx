@@ -1,6 +1,7 @@
 /**
  * 할 일 + 루틴 목록 (홈·일정 탭 공용)
  *
+ * 순서: ★ 중요 → 루틴 → 일반 할 일.
  * 피드백 13번: 중요한 항목은 목록 맨 위로 올리고, 체크박스 왼쪽 위에 작은 별을 붙인다.
  * 별은 SF Symbols(iOS)의 둥근 star.fill을 써서 "부드러운 별" 모양이 되게 했다.
  * 피드백 18번: 루틴은 제목 아래에 반복 요일(예: 월·수·금)을 작게 표시한다.
@@ -33,11 +34,16 @@ interface TodoListProps {
 export function TodoList({ todos, routines, date, colors, onEditRoutine }: TodoListProps) {
   const { toggle, setImportant, remove, toggleRoutine, setRoutineImportant, removeRoutine } = useTodoStore();
 
-  // 중요 항목을 먼저, 같은 중요도 안에서는 루틴 → 일반 할 일 순 (DB 정렬 순서 유지)
+  // 표시 순서 (수정 7번): ★ 중요(할 일·루틴 모두) → 루틴 → 일반 할 일.
+  // 정렬 안정성에 기대지 않도록 순위와 원래 순서를 명시적으로 비교한다.
+  const rank = (r: Row) => (r.important ? 0 : r.kind === "routine" ? 1 : 2);
   const rows: Row[] = [
     ...routines.map((r): Row => ({ kind: "routine", key: `r${r.id}`, important: r.important, item: r })),
     ...todos.map((t): Row => ({ kind: "todo", key: `t${t.id}`, important: t.important, item: t })),
-  ].sort((a, b) => Number(b.important) - Number(a.important));
+  ]
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => rank(a.row) - rank(b.row) || a.index - b.index)
+    .map(({ row }) => row);
 
   const openMenu = (row: Row) => {
     const { item } = row;

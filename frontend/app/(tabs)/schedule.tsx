@@ -11,9 +11,10 @@
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,7 +27,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { BottomSheet } from "@/src/components/BottomSheet";
-import { DateField, TimeField } from "@/src/components/DateTimeFields";
+import { DateJumpSheet } from "@/src/components/DateJumpSheet";
+import { DateField, ScheduleWhenField, type ScheduleWhen } from "@/src/components/DateTimeFields";
 import { MonthCalendar, type DayMark } from "@/src/components/MonthCalendar";
 import { TodoAddSheet } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
@@ -141,7 +143,7 @@ function ColorPicker({
       </View>
       <TouchableOpacity onPress={() => (editing ? setEditing(false) : startEdit())}>
         <Text style={[styles.colorEditLink, { color: colors.tint }]}>
-          {editing ? "색상 이름 편집 닫기" : "색상에 이름 붙이기 (예: 파랑 = 회사)"}
+          색상 별 편집 {editing ? "▲" : "▼"}
         </Text>
       </TouchableOpacity>
       {editing && (
@@ -161,9 +163,6 @@ function ColorPicker({
               />
             </View>
           ))}
-          <Text style={[styles.labelHint, { color: colors.subtext }]}>
-            이름은 입력칸을 벗어나면 저장되고, 같은 색의 모든 일정에 바로 적용됩니다.
-          </Text>
         </View>
       )}
     </View>
@@ -270,10 +269,8 @@ interface ScheduleModalProps {
 
 function ScheduleModal({ visible, initialDate, onClose, onSubmit, colors, initialData, labels, onSaveLabel }: ScheduleModalProps) {
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(initialDate);
-  const [endDate, setEndDate] = useState("");
-  const [time, setTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  // 시작일·종료일·시작 시간·종료 시간은 한 필드(ScheduleWhenField)에서 함께 고른다 (수정 6번)
+  const [when, setWhen] = useState<ScheduleWhen>({ date: initialDate, endDate: "", time: "", endTime: "" });
   const [note, setNote] = useState("");
   const [color, setColor] = useState(SCHEDULE_COLORS[0]);
   const isEdit = !!initialData;
@@ -281,20 +278,17 @@ function ScheduleModal({ visible, initialDate, onClose, onSubmit, colors, initia
   useEffect(() => {
     if (!visible) return;
     setTitle(initialData?.title ?? "");
-    setDate(initialData?.date ?? initialDate);
-    setEndDate(initialData?.end_date ?? "");
-    setTime(initialData?.time ?? "");
-    setEndTime(initialData?.end_time ?? "");
+    setWhen({
+      date: initialData?.date ?? initialDate,
+      endDate: initialData?.end_date ?? "",
+      time: initialData?.time ?? "",
+      endTime: initialData?.end_time ?? "",
+    });
     setNote(initialData?.note ?? "");
     setColor(initialData?.color || SCHEDULE_COLORS[0]);
   }, [visible, initialDate, initialData]);
 
-  // 시작일을 종료일보다 뒤로 옮기면 종료일을 비운다 (거꾸로 된 기간 방지)
-  const changeStart = (d: string) => {
-    setDate(d);
-    if (endDate && endDate <= d) setEndDate("");
-  };
-
+  const { date, endDate, time, endTime } = when;
   const multiDay = !!endDate && endDate > date;
 
   const handleSubmit = () => {
@@ -335,33 +329,7 @@ function ScheduleModal({ visible, initialDate, onClose, onSubmit, colors, initia
         value={title} onChangeText={setTitle} autoFocus={!isEdit}
       />
 
-      <DateField label="시작일" value={date} onChange={changeStart} colors={colors} />
-      <DateField
-        label="종료일 (선택 — 여러 날 이어지는 일정)"
-        value={endDate}
-        placeholder="하루 일정"
-        minDate={date}
-        onChange={(d) => setEndDate(d === date ? "" : d)}
-        onClear={() => setEndDate("")}
-        colors={colors}
-      />
-
-      <TimeField
-        label={multiDay ? "시작 시간 (첫날)" : "시작 시간"}
-        value={time}
-        placeholder="종일"
-        onChange={(t) => { setTime(t); if (!t) setEndTime(""); }}
-        colors={colors}
-      />
-      {time ? (
-        <TimeField
-          label={multiDay ? "끝나는 시간 (마지막 날, 선택)" : "끝나는 시간 (선택)"}
-          value={endTime}
-          placeholder="정하지 않음"
-          onChange={setEndTime}
-          colors={colors}
-        />
-      ) : null}
+      <ScheduleWhenField value={when} onChange={setWhen} colors={colors} initiallyOpen={!isEdit} />
 
       <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
       <TextInput
@@ -576,7 +544,7 @@ export default function ScheduleScreen() {
   const {
     monthSchedules, selectedDate, selectedDateSchedules, colorLabels,
     year, month, isLoaded,
-    loadMonth, selectDate, goToday, loadColorLabels, saveColorLabel,
+    loadMonth, selectDate, goToDate, goToday, loadColorLabels, saveColorLabel,
     add: addSchedule, update: updateSchedule, remove: removeSchedule,
   } = useScheduleStore();
 
@@ -595,6 +563,10 @@ export default function ScheduleScreen() {
   const [todoSheetVisible, setTodoSheetVisible] = useState(false);
   const [editRoutine, setEditRoutine] = useState<{ id: number; title: string; weekdays: string } | undefined>();
   const [detailVisible, setDetailVisible] = useState(false);
+  const [jumpVisible, setJumpVisible] = useState(false);
+  // 달력의 '오늘' 기준 — 앱을 켜 둔 채 자정이 지나도 다시 그려지도록 상태로 둔다 (수정 2번)
+  const [today, setToday] = useState(todayString());
+  const todayRef = useRef(today);
 
   // 첫 진입: 보고 있는 달의 일정·거래와 색상 이름을 불러온다
   useEffect(() => {
@@ -608,6 +580,32 @@ export default function ScheduleScreen() {
   useEffect(() => {
     loadTodosForDate(selectedDate);
   }, [selectedDate, loadTodosForDate]);
+
+  // 백그라운드에서 돌아왔을 때 날짜가 바뀌었으면 오늘 표시를 갱신하고,
+  // 어제(=그때의 오늘)를 보고 있었다면 새 오늘로 옮긴다
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      const now = todayString();
+      if (now === todayRef.current) return;
+      const wasOnToday = useScheduleStore.getState().selectedDate === todayRef.current;
+      todayRef.current = now;
+      setToday(now);
+      if (wasOnToday) {
+        goToday();
+        const d = new Date();
+        loadBudgetMonth(d.getFullYear(), d.getMonth() + 1);
+      }
+    });
+    return () => sub.remove();
+  }, [goToday, loadBudgetMonth]);
+
+  // 수정 1번: 연·월·일을 골라 바로 이동
+  const handleJump = useCallback(async (date: string) => {
+    await goToDate(date);
+    const [y, m] = date.split("-").map(Number);
+    await loadBudgetMonth(y, m);
+  }, [goToDate, loadBudgetMonth]);
 
   const changeMonth = useCallback((delta: -1 | 1) => {
     const next = shiftMonth(year, month, delta);
@@ -631,7 +629,6 @@ export default function ScheduleScreen() {
   const handleFabPress = () => {
     Alert.alert("추가하기", formatMonthDay(selectedDate), [
       { text: "📅 일정 추가", onPress: () => { setEditSchedule(undefined); setScheduleModalVisible(true); } },
-      { text: "✅ 할 일·루틴 추가", onPress: () => { setEditRoutine(undefined); setTodoSheetVisible(true); } },
       { text: "💸 지출 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("expense"); setBudgetModalVisible(true); } },
       { text: "💰 수입 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("income"); setBudgetModalVisible(true); } },
       { text: "취소", style: "cancel" },
@@ -643,7 +640,7 @@ export default function ScheduleScreen() {
     setTodoSheetVisible(true);
   }, []);
 
-  const isToday = selectedDate === todayString();
+  const isToday = selectedDate === today;
   const isThisMonth = (() => { const d = new Date(); return year === d.getFullYear() && month === d.getMonth() + 1; })();
   const todoTotal = selectedTodos.length + selectedRoutines.length;
   const todoDone = [...selectedTodos, ...selectedRoutines].filter((t) => t.done).length;
@@ -659,7 +656,12 @@ export default function ScheduleScreen() {
         <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="이전 달">
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>‹</Text>
         </TouchableOpacity>
-        <Text style={[styles.monthLabel, { color: colors.text }]}>{year}년 {month}월</Text>
+        {/* 연·월을 누르면 날짜 이동 창 (수정 1번) */}
+        <TouchableOpacity onPress={() => setJumpVisible(true)} accessibilityLabel={`${year}년 ${month}월, 눌러서 날짜 이동`}>
+          <Text style={[styles.monthLabel, { color: colors.text }]}>
+            {year}년 {month}월 <Text style={[styles.monthCaret, { color: colors.subtext }]}>▾</Text>
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="다음 달">
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>›</Text>
         </TouchableOpacity>
@@ -675,7 +677,7 @@ export default function ScheduleScreen() {
       </View>
 
       <MonthCalendar
-        year={year} month={month} selectedDate={selectedDate} marks={marks}
+        year={year} month={month} selectedDate={selectedDate} marks={marks} today={today}
         onSelectDate={selectDate} onSwipeMonth={changeMonth} colors={colors}
       />
 
@@ -795,6 +797,14 @@ export default function ScheduleScreen() {
         colors={colors}
       />
 
+      <DateJumpSheet
+        visible={jumpVisible}
+        onClose={() => setJumpVisible(false)}
+        selectedDate={selectedDate}
+        onJump={handleJump}
+        colors={colors}
+      />
+
       <DayDetailSheet
         visible={detailVisible}
         onClose={() => setDetailVisible(false)}
@@ -821,6 +831,7 @@ const styles = StyleSheet.create({
   monthArrow: { padding: 8 },
   monthArrowText: { fontSize: 32, fontWeight: "300" },
   monthLabel: { fontSize: 20, fontWeight: "700", minWidth: 120, textAlign: "center" },
+  monthCaret: { fontSize: 14 },
   // 월 제목 줄의 세로 가운데에 맞춘 오른쪽 끝 버튼 (제목이 가운데 정렬을 유지하도록 absolute)
   todayBtn: { position: "absolute", right: 20, bottom: 22, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
   todayBtnText: { fontSize: 12, fontWeight: "600" },
@@ -840,7 +851,6 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   labelDot: { width: 16, height: 16, borderRadius: 8 },
   labelInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14 },
-  labelHint: { fontSize: 11, lineHeight: 16 },
   // ── 선택일 바 ─────────────────────────────────────────────
   selectedDateBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",

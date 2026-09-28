@@ -11,6 +11,8 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchNews, NEWS_CATEGORIES, type NewsCategory, type NewsItem } from "@/src/api/news";
+import { NewsCategorySheet } from "@/src/components/NewsCategorySheet";
+import { useSettingsStore } from "@/src/store/settingsStore";
 
 // ── 섹션 오류 카드 ─────────────────────────────────────────────
 // 컴포넌트를 화면 바깥에 정의해야 매 렌더마다 unmount/remount 되는 React 안티패턴을 피한다.
@@ -77,7 +79,10 @@ export default function NewsScreen() {
   const colors = Colors[scheme];
   const insets = useSafeAreaInsets();
 
-  const [category, setCategory] = useState<NewsCategory>("all");
+  // 사용자가 켜 둔 카테고리만, 정한 순서대로 칩에 보여준다 (수정 3번)
+  const { newsCategories } = useSettingsStore();
+  const [category, setCategory] = useState<NewsCategory>(newsCategories[0] ?? "all");
+  const [editVisible, setEditVisible] = useState(false);
   // 카테고리별로 받아 둔 결과 — 칩을 다시 누르면 기다림 없이 바로 보여준다
   const [byCategory, setByCategory] = useState<Partial<Record<NewsCategory, CategoryState>>>({});
   const [loading, setLoading] = useState(false);
@@ -101,6 +106,11 @@ export default function NewsScreen() {
       }
     }
   }, []);
+
+  // 보던 카테고리를 설정에서 끄면 첫 번째 카테고리로 옮긴다
+  useEffect(() => {
+    if (!newsCategories.includes(category)) setCategory(newsCategories[0]);
+  }, [newsCategories, category]);
 
   // 카테고리를 처음 열 때만 불러온다 (이미 받은 카테고리는 새로고침 버튼으로 갱신)
   useEffect(() => {
@@ -137,7 +147,9 @@ export default function NewsScreen() {
         style={styles.chipScroll}
         contentContainerStyle={styles.chips}
       >
-        {NEWS_CATEGORIES.map((c) => {
+        {NEWS_CATEGORIES.filter((c) => newsCategories.includes(c.value))
+          .sort((a, b) => newsCategories.indexOf(a.value) - newsCategories.indexOf(b.value))
+          .map((c) => {
           const selected = c.value === category;
           return (
             <TouchableOpacity
@@ -150,6 +162,13 @@ export default function NewsScreen() {
             </TouchableOpacity>
           );
         })}
+        <TouchableOpacity
+          onPress={() => setEditVisible(true)}
+          style={[styles.chip, styles.editChip, { borderColor: colors.cardBorder }]}
+          accessibilityLabel="뉴스 카테고리 편집"
+        >
+          <Text style={[styles.chipText, { color: colors.tint }]}>⚙ 편집</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <ScrollView
@@ -184,6 +203,7 @@ export default function NewsScreen() {
           </Text>
         ) : null}
       </ScrollView>
+      <NewsCategorySheet visible={editVisible} onClose={() => setEditVisible(false)} colors={colors} />
     </View>
   );
 }
@@ -202,6 +222,7 @@ const styles = StyleSheet.create({
   chips: { paddingHorizontal: 24, gap: 8, paddingBottom: 12 },
   chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7 },
   chipText: { fontSize: 13, fontWeight: "600" },
+  editChip: { borderStyle: "dashed" },
   centered: { justifyContent: "center", alignItems: "center", gap: 12, paddingVertical: 48 },
   statusText: { fontSize: 14 },
   container: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },

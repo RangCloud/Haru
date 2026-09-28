@@ -15,7 +15,7 @@ import { useRef } from "react";
 import { PanResponder, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
-import { buildCalendarDays, toDateStr, todayString, WEEKDAYS_KO } from "@/src/utils/date";
+import { buildCalendarWeeks, toDateStr, WEEKDAYS_KO } from "@/src/utils/date";
 
 export interface DayMark {
   scheduleColors: string[];   // 그날 일정들의 색 (중복 제거, 최대 3개로 잘라서 표시)
@@ -27,6 +27,7 @@ interface MonthCalendarProps {
   year: number;
   month: number;
   selectedDate: string;
+  today: string;               // 화면이 관리하는 '오늘' — 자정이 지나면 부모가 갱신한다
   marks: Record<string, DayMark>;
   onSelectDate: (date: string) => void;
   onSwipeMonth: (delta: -1 | 1) => void;
@@ -36,9 +37,8 @@ interface MonthCalendarProps {
 const SWIPE_DISTANCE = 50;   // 이만큼 밀어야 달이 넘어간다
 const MAX_SCHEDULE_DOTS = 3;
 
-export function MonthCalendar({ year, month, selectedDate, marks, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
-  const today = todayString();
-  const days = buildCalendarDays(year, month);
+export function MonthCalendar({ year, month, selectedDate, today, marks, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
+  const weeks = buildCalendarWeeks(year, month);
 
   // PanResponder는 한 번만 만들고, 최신 콜백은 ref로 읽는다 (재생성 시 제스처가 끊기는 것 방지)
   const swipeRef = useRef(onSwipeMonth);
@@ -64,51 +64,53 @@ export function MonthCalendar({ year, month, selectedDate, marks, onSelectDate, 
           </Text>
         ))}
       </View>
-      <View style={styles.grid}>
-        {days.map((day, idx) => {
-          if (day === null) return <View key={`e${idx}`} style={styles.cell} />;
-          const date = toDateStr(year, month, day);
-          const isSelected = date === selectedDate;
-          const isToday = date === today;
-          const mark = marks[date];
-          const dow = idx % 7;
-          const baseColor = dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
-
-          return (
-            <TouchableOpacity
-              key={date}
-              style={styles.cell}
-              onPress={() => onSelectDate(date)}
-              activeOpacity={0.6}
-              accessibilityLabel={`${month}월 ${day}일${isToday ? ", 오늘" : ""}`}
-              accessibilityState={{ selected: isSelected }}
-            >
-              <View style={[
-                styles.dayCircle,
-                isSelected && { backgroundColor: colors.tint },
-                !isSelected && isToday && { borderWidth: 1.5, borderColor: colors.tint },
-              ]}>
-                <Text style={[
-                  styles.dayText,
-                  { color: isSelected ? "#fff" : isToday ? colors.tint : baseColor },
-                  (isToday || isSelected) && styles.dayTextBold,
+      {/* 한 주씩 줄로 그린다 — 퍼센트 너비 + 줄바꿈 방식은 기기에 따라 7번째 칸이 밀려 날짜가 어긋났다 */}
+      {weeks.map((week, wi) => (
+        <View key={wi} style={styles.weekRow}>
+          {week.map((day, dow) => {
+            if (day === null) return <View key={`e${dow}`} style={styles.cell} />;
+            const date = toDateStr(year, month, day);
+            const isSelected = date === selectedDate;
+            const isToday = date === today;
+            const mark = marks[date];
+            const baseColor = dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
+  
+            return (
+              <TouchableOpacity
+                key={date}
+                style={styles.cell}
+                onPress={() => onSelectDate(date)}
+                activeOpacity={0.6}
+                accessibilityLabel={`${month}월 ${day}일${isToday ? ", 오늘" : ""}`}
+                accessibilityState={{ selected: isSelected }}
+              >
+                <View style={[
+                  styles.dayCircle,
+                  isSelected && { backgroundColor: colors.tint },
+                  !isSelected && isToday && { borderWidth: 1.5, borderColor: colors.tint },
                 ]}>
-                  {day}
-                </Text>
-              </View>
-              {/* 점은 원 바깥(아래)에 두어 선택 상태에서도 원래 색이 보이게 한다 */}
-              <View style={styles.dots}>
-                {mark?.scheduleColors.slice(0, MAX_SCHEDULE_DOTS).map((c) => (
-                  <View key={c} style={[styles.dot, { backgroundColor: c }]} />
-                ))}
-                {/* 수입·지출은 짧은 막대 — 빨강·초록 일정 점과 모양으로도 구분되게 한다 */}
-                {mark?.expense && <View style={[styles.moneyMark, { backgroundColor: colors.expense }]} />}
-                {mark?.income && <View style={[styles.moneyMark, { backgroundColor: colors.income }]} />}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                  <Text style={[
+                    styles.dayText,
+                    { color: isSelected ? "#fff" : isToday ? colors.tint : baseColor },
+                    (isToday || isSelected) && styles.dayTextBold,
+                  ]}>
+                    {day}
+                  </Text>
+                </View>
+                {/* 점은 원 바깥(아래)에 두어 선택 상태에서도 원래 색이 보이게 한다 */}
+                <View style={styles.dots}>
+                  {mark?.scheduleColors.slice(0, MAX_SCHEDULE_DOTS).map((c) => (
+                    <View key={c} style={[styles.dot, { backgroundColor: c }]} />
+                  ))}
+                  {/* 수입·지출은 짧은 막대 — 빨강·초록 일정 점과 모양으로도 구분되게 한다 */}
+                  {mark?.expense && <View style={[styles.moneyMark, { backgroundColor: colors.expense }]} />}
+                  {mark?.income && <View style={[styles.moneyMark, { backgroundColor: colors.income }]} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
@@ -116,9 +118,9 @@ export function MonthCalendar({ year, month, selectedDate, marks, onSelectDate, 
 const styles = StyleSheet.create({
   calendar: { paddingHorizontal: 12, marginBottom: 4 },
   weekdayRow: { flexDirection: "row", marginBottom: 4 },
-  weekdayText: { width: `${100 / 7}%`, textAlign: "center", fontSize: 12, fontWeight: "600" },
-  grid: { flexDirection: "row", flexWrap: "wrap" },
-  cell: { width: `${100 / 7}%`, height: 50, alignItems: "center", paddingTop: 3 },
+  weekdayText: { flex: 1, textAlign: "center", fontSize: 12, fontWeight: "600" },
+  weekRow: { flexDirection: "row" },
+  cell: { flex: 1, height: 50, alignItems: "center", paddingTop: 3 },
   dayCircle: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   dayText: { fontSize: 15 },
   dayTextBold: { fontWeight: "700" },

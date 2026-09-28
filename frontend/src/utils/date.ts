@@ -50,6 +50,18 @@ export function buildCalendarDays(year: number, month: number): (number | null)[
   return cells;
 }
 
+/**
+ * 달력 칸을 7개씩 주 단위로 나눈다.
+ * 칸 너비를 '100/7 %'로 주고 줄바꿈(flexWrap)에 맡기면 기기에 따라 소수점 반올림으로
+ * 7번째 칸이 다음 줄로 밀려 날짜와 요일이 한 칸씩 어긋난다. 주마다 한 줄씩 그리면 이 문제가 없다.
+ */
+export function buildCalendarWeeks(year: number, month: number): (number | null)[][] {
+  const cells = buildCalendarDays(year, month);
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
 /** (year, month)에서 delta개월 이동한 연월 */
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const idx = year * 12 + (month - 1) + delta;
