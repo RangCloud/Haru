@@ -125,9 +125,19 @@ export default function NewsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      {/* 제목 + 새로고침 버튼 (상단 안전 영역 반영, 피드백 1번) */}
+      {/* 제목 + 필터 + 새로고침 (상단 안전 영역 반영) */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Text style={[styles.screenTitle, { color: colors.text }]}>뉴스 📰</Text>
+        <View style={styles.titleGroup}>
+          <Text style={[styles.screenTitle, { color: colors.text }]}>뉴스 📰</Text>
+          {/* 보고 싶은 카테고리 켜기·끄기와 순서 변경 */}
+          <TouchableOpacity
+            onPress={() => setEditVisible(true)}
+            style={[styles.filterBtn, { borderColor: colors.tint }]}
+            accessibilityLabel="뉴스 카테고리 필터"
+          >
+            <Text style={[styles.filterText, { color: colors.tint }]}>필터</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           onPress={onRefresh}
           disabled={loading}
@@ -150,28 +160,22 @@ export default function NewsScreen() {
         {NEWS_CATEGORIES.filter((c) => newsCategories.includes(c.value))
           .sort((a, b) => newsCategories.indexOf(a.value) - newsCategories.indexOf(b.value))
           .map((c) => {
-          const selected = c.value === category;
-          return (
-            <TouchableOpacity
-              key={c.value}
-              onPress={() => setCategory(c.value)}
-              style={[styles.chip, { borderColor: selected ? colors.tint : colors.cardBorder, backgroundColor: selected ? colors.tint : colors.card }]}
-              accessibilityState={{ selected }}
-            >
-              <Text style={[styles.chipText, { color: selected ? "#fff" : colors.subtext }]}>{c.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-        <TouchableOpacity
-          onPress={() => setEditVisible(true)}
-          style={[styles.chip, styles.editChip, { borderColor: colors.cardBorder }]}
-          accessibilityLabel="뉴스 카테고리 편집"
-        >
-          <Text style={[styles.chipText, { color: colors.tint }]}>⚙ 편집</Text>
-        </TouchableOpacity>
+            const selected = c.value === category;
+            return (
+              <TouchableOpacity
+                key={c.value}
+                onPress={() => setCategory(c.value)}
+                style={[styles.chip, { borderColor: selected ? colors.tint : colors.cardBorder, backgroundColor: selected ? colors.tint : colors.card }]}
+                accessibilityState={{ selected }}
+              >
+                <Text style={[styles.chipText, { color: selected ? "#fff" : colors.subtext }]}>{c.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
       </ScrollView>
 
       <ScrollView
+        style={styles.list}
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
       >
@@ -218,11 +222,15 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingBottom: 12 },
   refreshBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  chipScroll: { flexGrow: 0 },
+  // flexShrink 0: 기사가 많아도 칩 줄 높이가 줄어들어 글자가 잘리지 않게 한다
+  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  list: { flex: 1 },
+  titleGroup: { flexDirection: "row", alignItems: "center", gap: 10 },
+  filterBtn: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 4 },
+  filterText: { fontSize: 13, fontWeight: "600" },
   chips: { paddingHorizontal: 24, gap: 8, paddingBottom: 12 },
   chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7 },
   chipText: { fontSize: 13, fontWeight: "600" },
-  editChip: { borderStyle: "dashed" },
   centered: { justifyContent: "center", alignItems: "center", gap: 12, paddingVertical: 48 },
   statusText: { fontSize: 14 },
   container: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },

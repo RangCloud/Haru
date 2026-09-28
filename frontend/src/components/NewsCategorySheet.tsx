@@ -1,5 +1,5 @@
 /**
- * 뉴스 카테고리 설정 시트 (수정 3번)
+ * 뉴스 필터 시트 — 카테고리 설정 (수정 3번)
  *
  * 보고 싶은 카테고리만 켜고, ↑↓로 칩 순서를 정한다. 바꾸는 즉시 저장된다.
  * 켜진 카테고리가 위, 꺼진 카테고리가 아래에 모인다. 최소 하나는 켜 두어야 한다.
@@ -66,7 +66,7 @@ export function NewsCategorySheet({ visible, onClose, colors }: {
   );
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="뉴스 카테고리" colors={colors}>
+    <BottomSheet visible={visible} onClose={onClose} title="뉴스 필터" colors={colors}>
       <Text style={[styles.hint, { color: colors.subtext }]}>보고 싶은 카테고리만 켜고, ↑↓로 순서를 바꿀 수 있어요.</Text>
       <View>
         {enabled.map((c, i) => row(c, true, i))}

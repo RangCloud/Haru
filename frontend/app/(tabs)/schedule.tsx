@@ -6,7 +6,7 @@
  * 2. 달력 (좌우 스와이프로 달 이동, 날짜 아래 일정 색 점·수입/지출 막대)
  * 3. 선택한 날짜 바 (한눈에 보기 버튼)
  * 4. 그날의 일정 → 할 일·루틴 → 수입·지출 목록
- * 5. "+ 추가" → 일정 / 할 일 / 지출 / 수입
+ * 5. 날짜 바의 "+ 추가" → 일정 / 지출 / 수입
  *
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
  */
@@ -683,22 +683,32 @@ export default function ScheduleScreen() {
 
       {/* 선택한 날짜 바 */}
       <View style={[styles.selectedDateBar, { borderTopColor: colors.separator }]}>
-        <Text style={[styles.selectedDateText, { color: colors.text }]}>
+        <Text style={[styles.selectedDateText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
           {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
         </Text>
-        <TouchableOpacity
-          onPress={() => setDetailVisible(true)}
-          style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
-          accessibilityLabel="이 날짜 한눈에 보기"
-        >
-          <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
-        </TouchableOpacity>
+        <View style={styles.barActions}>
+          <TouchableOpacity
+            onPress={() => setDetailVisible(true)}
+            style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
+            accessibilityLabel="이 날짜 한눈에 보기"
+          >
+            <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
+          </TouchableOpacity>
+          {/* 추가 버튼 — 화면 아래에 떠 있으면 목록(수입·지출 등)을 가려서 날짜 바로 옮겼다 */}
+          <TouchableOpacity
+            onPress={handleFabPress}
+            style={[styles.addBtn, { backgroundColor: colors.tint }]}
+            accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
+          >
+            <Text style={styles.addBtnText}>+ 추가</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isLoaded && totalCount === 0 ? (
         <View style={styles.empty}>
           <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·할 일·거래 내역이 없습니다.</Text>
-          <Text style={[styles.emptyHint, { color: colors.subtext }]}>아래 + 버튼으로 추가하세요</Text>
+          <Text style={[styles.emptyHint, { color: colors.subtext }]}>오른쪽 위 + 추가 버튼으로 추가하세요</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.listContent}>
@@ -748,10 +758,6 @@ export default function ScheduleScreen() {
           <Text style={[styles.hintText, { color: colors.subtext }]}>항목을 길게 눌러 수정·삭제</Text>
         </ScrollView>
       )}
-
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.tint }]} onPress={handleFabPress}>
-        <Text style={styles.fabText}>+ 추가</Text>
-      </TouchableOpacity>
 
       <ScheduleModal
         visible={scheduleModalVisible}
@@ -856,11 +862,15 @@ const styles = StyleSheet.create({
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     paddingHorizontal: 24, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth,
   },
-  selectedDateText: { fontSize: 15, fontWeight: "600" },
+  // 버튼 두 개와 한 줄에 놓이므로 좁은 화면에서는 날짜 글자가 줄어든다
+  selectedDateText: { flexShrink: 1, fontSize: 15, fontWeight: "600", marginRight: 8 },
+  barActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   detailBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  addBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   detailBtnText: { fontSize: 12, fontWeight: "600" },
   // ── 목록 ──────────────────────────────────────────────────
-  listContent: { paddingHorizontal: 24, paddingBottom: 110, gap: 8 },
+  listContent: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },
   sectionTitle: { fontSize: 12, fontWeight: "600", letterSpacing: 0.5, marginTop: 6 },
   daySummary: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
   daySummaryText: { fontSize: 13, fontWeight: "600" },
@@ -877,13 +887,10 @@ const styles = StyleSheet.create({
   txBadgeText: { fontSize: 11, fontWeight: "600" },
   txNote: { flex: 1, fontSize: 14 },
   txAmount: { fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingBottom: 100, gap: 6 },
+  empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingBottom: 40, gap: 6 },
   emptyText: { fontSize: 15 },
   emptyHint: { fontSize: 13 },
   hintText: { fontSize: 11, textAlign: "center", paddingTop: 8 },
-  // ── FAB ───────────────────────────────────────────────────
-  fab: { position: "absolute", bottom: 32, left: 24, right: 24, paddingVertical: 16, borderRadius: 14, alignItems: "center" },
-  fabText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   // ── 시트 공통 ─────────────────────────────────────────────
   fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
