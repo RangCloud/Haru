@@ -1,6 +1,6 @@
 /**
  * 홈 화면
- * 날씨 위젯(우상단) + 오늘 일정 → 투두리스트 → 월별 가계부 요약(‹ › 로 달 이동)
+ * 날씨 위젯(우상단) + 오늘 일정 → 투두리스트 → 월별 가계부 요약(제목을 눌러 연·월 선택)
  * 톱니바퀴(⚙) 탭 → 설정 시트 (테마·시작 화면·계정·로그아웃)
  */
 
@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { BottomSheet } from "@/src/components/BottomSheet";
+import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { TodoAddSheet } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
 import { type RoutineForDate } from "@/src/db/routine";
@@ -33,7 +34,6 @@ import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
 import { requestNotificationPermission } from "@/src/utils/notifications";
-import { shiftMonth } from "@/src/utils/date";
 import { timeLabelOn } from "@/src/utils/scheduleText";
 import { writeWidgetData } from "@/src/utils/widgetData";
 
@@ -237,15 +237,16 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
 
 // ── 가계부 요약 카드 ──────────────────────────────────────────
 
-// 수입 총액·지출 총액을 보여주고, ‹ › 로 다른 달을 볼 수 있다
+// 수입 총액·지출 총액을 보여주고, 제목('9월 가계부 ▾')을 누르면 연·월을 골라 다른 달을 본다
 function BudgetSummaryCard({
-  year, month, income, expense, onMove, colors,
+  year, month, income, expense, onPickMonth, colors,
 }: {
   year: number; month: number;
   income: number; expense: number;
-  onMove: (delta: -1 | 1) => void;
+  onPickMonth: (year: number, month: number) => void;
   colors: typeof Colors.light;
 }) {
+  const [pickerVisible, setPickerVisible] = useState(false);
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
 
@@ -265,14 +266,16 @@ function BudgetSummaryCard({
     >
       <View style={styles.cardHeader}>
         <View style={styles.monthNav}>
-          <TouchableOpacity onPress={() => onMove(-1)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }} accessibilityLabel="이전 달 가계부">
-            <Text style={[styles.monthArrow, { color: colors.tint }]}>‹</Text>
-          </TouchableOpacity>
-          <Text style={[styles.cardLabel, { color: colors.text }]}>
-            {year === now.getFullYear() ? "" : `${year}년 `}{month}월 가계부
-          </Text>
-          <TouchableOpacity onPress={() => onMove(1)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }} accessibilityLabel="다음 달 가계부">
-            <Text style={[styles.monthArrow, { color: colors.tint }]}>›</Text>
+          {/* 일정 탭 상단처럼 제목을 누르면 연·월 선택 창 */}
+          <TouchableOpacity
+            onPress={() => setPickerVisible(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            accessibilityLabel={`${year}년 ${month}월 가계부, 눌러서 다른 달 선택`}
+          >
+            <Text style={[styles.cardLabel, { color: colors.text }]}>
+              {year === now.getFullYear() ? "" : `${year}년 `}{month}월 가계부{" "}
+              <Text style={[styles.monthCaret, { color: colors.subtext }]}>▾</Text>
+            </Text>
           </TouchableOpacity>
           {isCurrent && (
             <View style={[styles.thisMonthPill, { backgroundColor: colors.tintLight }]}>
@@ -293,6 +296,15 @@ function BudgetSummaryCard({
           <Text style={[styles.budgetValue, { color: colors.expense }]}>{formatAmount(expense)}</Text>
         </View>
       </View>
+
+      <DateJumpSheet
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        mode="month"
+        selectedDate={`${year}-${String(month).padStart(2, "0")}-01`}
+        onPickMonth={onPickMonth}
+        colors={colors}
+      />
     </TouchableOpacity>
   );
 }
@@ -542,10 +554,7 @@ export default function HomeScreen() {
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>가계부</Text>
       <BudgetSummaryCard
         year={homeYear} month={homeMonth} income={homeIncome} expense={homeExpense} colors={colors}
-        onMove={(delta) => {
-          const next = shiftMonth(homeYear, homeMonth, delta);
-          loadHomeMonth(next.year, next.month);
-        }}
+        onPickMonth={loadHomeMonth}
       />
 
       {/* 설정 모달 */}
@@ -601,7 +610,7 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 13, fontWeight: "600", letterSpacing: 0.2 },
   cardLink: { fontSize: 13 },
   monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
-  monthArrow: { fontSize: 22, fontWeight: "400", lineHeight: 24 },
+  monthCaret: { fontSize: 11 },
   thisMonthPill: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   thisMonthText: { fontSize: 10, fontWeight: "700" },
   emptyText: { fontSize: 14 },

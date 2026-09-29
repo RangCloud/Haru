@@ -1,8 +1,10 @@
 /**
  * 날짜 이동 시트 (수정 1번)
  *
- * 달력 상단 '2026년 9월'을 누르면 열린다. 연도(‹ 2026 ›) → 월(1~12) → 일 순서로 고르면
- * 달력이 그 날짜로 바로 이동한다. 먼 달로 갈 때 화살표를 여러 번 누르지 않아도 된다.
+ * - mode="day"(기본): 일정 탭 상단 '2026년 9월'을 누르면 열린다.
+ *   연도(‹ 2026 ›) → 월(1~12) → 일 순서로 고르면 달력이 그 날짜로 바로 이동한다.
+ * - mode="month": 홈 가계부 카드의 '9월 가계부 ▾'를 누르면 열린다. 연도와 월만 고르고,
+ *   월을 누르는 즉시 그 달로 바뀐다 (가계부는 달 단위라 일 선택이 필요 없다).
  */
 
 import { useEffect, useState } from "react";
@@ -16,14 +18,16 @@ import { parseDate } from "@/src/utils/date";
 interface DateJumpSheetProps {
   visible: boolean;
   onClose: () => void;
-  selectedDate: string;              // 지금 달력에서 선택된 날짜 (열 때 이 연월에서 시작)
-  onJump: (date: string) => void;
+  selectedDate: string;              // 지금 선택된 날짜 (열 때 이 연월에서 시작, month 모드는 그 달 1일)
+  mode?: "day" | "month";
+  onJump?: (date: string) => void;                     // day 모드: 날짜를 고르면
+  onPickMonth?: (year: number, month: number) => void; // month 모드: 월을 고르면
   colors: typeof Colors.light;
 }
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-export function DateJumpSheet({ visible, onClose, selectedDate, onJump, colors }: DateJumpSheetProps) {
+export function DateJumpSheet({ visible, onClose, selectedDate, mode = "day", onJump, onPickMonth, colors }: DateJumpSheetProps) {
   const [year, setYear] = useState(0);
   const [month, setMonth] = useState(1);
 
@@ -35,10 +39,21 @@ export function DateJumpSheet({ visible, onClose, selectedDate, onJump, colors }
     setMonth(d.getMonth() + 1);
   }, [visible, selectedDate]);
 
-  const jump = (date: string) => { onJump(date); onClose(); };
+  const jump = (date: string) => { onJump?.(date); onClose(); };
+  const isMonthMode = mode === "month";
+
+  // 월 칩 누르기: day 모드는 아래 달력만 바꾸고, month 모드는 바로 확정하고 닫는다
+  const pressMonth = (m: number) => {
+    if (isMonthMode) { onPickMonth?.(year, m); onClose(); }
+    else setMonth(m);
+  };
+
+  // month 모드에서는 '지금 보고 있는 달'을 채워서 표시하고, 이번 달은 테두리로 알려준다
+  const selected = parseDate(selectedDate);
+  const now = new Date();
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="날짜 이동" colors={colors}>
+    <BottomSheet visible={visible} onClose={onClose} title={isMonthMode ? "월 선택" : "날짜 이동"} colors={colors}>
       {/* 연도 */}
       <View style={styles.yearRow}>
         <TouchableOpacity onPress={() => setYear((y) => y - 1)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityLabel="이전 연도">
@@ -54,24 +69,37 @@ export function DateJumpSheet({ visible, onClose, selectedDate, onJump, colors }
       {[0, 1, 2].map((row) => (
         <View key={row} style={styles.monthRow}>
           {MONTHS.slice(row * 4, row * 4 + 4).map((m) => {
-            const on = m === month;
+            const on = isMonthMode
+              ? year === selected.getFullYear() && m === selected.getMonth() + 1
+              : m === month;
+            const isCurrent = isMonthMode && !on && year === now.getFullYear() && m === now.getMonth() + 1;
             return (
               <TouchableOpacity
                 key={m}
-                onPress={() => setMonth(m)}
-                style={[styles.monthChip, { borderColor: on ? colors.tint : colors.separator, backgroundColor: on ? colors.tint : colors.card }]}
+                onPress={() => pressMonth(m)}
+                style={[styles.monthChip, {
+                  borderColor: on || isCurrent ? colors.tint : colors.separator,
+                  backgroundColor: on ? colors.tint : colors.card,
+                }]}
                 accessibilityState={{ selected: on }}
+                accessibilityLabel={`${year}년 ${m}월${isCurrent ? ", 이번 달" : ""}`}
               >
-                <Text style={[styles.monthText, { color: on ? "#fff" : colors.text }]}>{m}월</Text>
+                <Text style={[styles.monthText, { color: on ? "#fff" : isCurrent ? colors.tint : colors.text }]}>{m}월</Text>
               </TouchableOpacity>
             );
           })}
         </View>
       ))}
 
-      {/* 일 — 고른 연월의 달력에서 날짜를 누르면 바로 이동 */}
-      <Text style={[styles.label, { color: colors.subtext }]}>{year}년 {month}월 — 날짜를 누르면 이동합니다</Text>
-      {year > 0 && (
+      {isMonthMode && (
+        <Text style={[styles.label, { color: colors.subtext }]}>월을 누르면 그 달의 수입·지출 합계를 보여줍니다.</Text>
+      )}
+
+      {/* 일 — 고른 연월의 달력에서 날짜를 누르면 바로 이동 (day 모드만) */}
+      {!isMonthMode && (
+        <Text style={[styles.label, { color: colors.subtext }]}>{year}년 {month}월 — 날짜를 누르면 이동합니다</Text>
+      )}
+      {!isMonthMode && year > 0 && (
         <View style={[styles.gridBox, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <CalendarGrid
             year={year}
