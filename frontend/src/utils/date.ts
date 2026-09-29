@@ -62,6 +62,43 @@ export function buildCalendarWeeks(year: number, month: number): (number | null)
   return weeks;
 }
 
+export interface CalendarCell {
+  date: string;      // YYYY-MM-DD
+  day: number;
+  inMonth: boolean;  // false면 앞뒤 달 날짜 (흐리게 표시)
+}
+
+/**
+ * 앞뒤 달 날짜까지 채운 주 단위 달력 칸.
+ * 1일 앞의 빈칸은 지난달 마지막 날들로, 마지막 주 뒤의 빈칸은 다음 달 첫날들로 채운다.
+ */
+export function buildCalendarGrid(year: number, month: number): CalendarCell[][] {
+  const firstDow = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const total = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+  const cells: CalendarCell[] = [];
+  for (let i = 0; i < total; i++) {
+    // Date가 0일·음수일·말일 초과를 알아서 앞뒤 달로 넘겨 준다
+    const d = new Date(year, month - 1, 1 - firstDow + i);
+    cells.push({
+      date: toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate()),
+      day: d.getDate(),
+      inMonth: d.getMonth() === month - 1,
+    });
+  }
+  const weeks: CalendarCell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
+/** 칸 안 금액 표시용 — 22000 → '2.2만', 3200000 → '320만', 150000000 → '1.5억', 9800 → '9,800' */
+export function formatCompactWon(n: number): string {
+  const trim = (v: number) => (Math.round(v * 10) / 10).toString();
+  if (n >= 100_000_000) return `${trim(n / 100_000_000)}억`;
+  if (n >= 10_000) return n >= 1_000_000 ? `${Math.round(n / 10_000)}만` : `${trim(n / 10_000)}만`;
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 /** (year, month)에서 delta개월 이동한 연월 */
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const idx = year * 12 + (month - 1) + delta;

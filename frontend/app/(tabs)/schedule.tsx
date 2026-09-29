@@ -5,7 +5,7 @@
  * 1. 월 헤더 (‹ 2026년 9월 › · 오늘 버튼)
  * 2. 달력 (좌우 스와이프로 달 이동, 날짜 아래 일정 색 점·수입/지출 막대)
  * 3. 선택한 날짜 바 (한눈에 보기 버튼)
- * 4. 그날의 일정 → 할 일·루틴 → 수입·지출 목록
+ * 4. 그날의 일정 → 수입·지출 목록 (할 일은 홈에서만 다룬다)
  * 5. 날짜 바의 "+ 추가" → 일정 / 지출 / 수입
  *
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
@@ -29,9 +29,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { DateField, ScheduleWhenField, type ScheduleWhen } from "@/src/components/DateTimeFields";
-import { MonthCalendar, type DayMark } from "@/src/components/MonthCalendar";
-import { TodoAddSheet } from "@/src/components/TodoAddSheet";
-import { TodoList } from "@/src/components/TodoList";
+import { MonthCalendar, type CellEvent, type DayMark } from "@/src/components/MonthCalendar";
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
@@ -39,14 +37,12 @@ import {
   type Transaction,
 } from "@/src/db/budget";
 import { type ColorLabels } from "@/src/db/colorLabel";
-import { type RoutineForDate } from "@/src/db/routine";
 import { type NewScheduleItem, type ScheduleItem } from "@/src/db/schedule";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
-import { useTodoStore } from "@/src/store/todoStore";
 import { formatMonthDay, parseDate, shiftMonth, toDateStr, todayString } from "@/src/utils/date";
 import { scheduleEventNotification } from "@/src/utils/notifications";
-import { lastDayOf, periodLabel, sortForDate, timeLabelOn } from "@/src/utils/scheduleText";
+import { lastDayOf, periodLabel, timeLabelOn } from "@/src/utils/scheduleText";
 
 type ThemeColors = (typeof Colors)["light"];
 
@@ -75,37 +71,46 @@ function withAlpha(hex: string, alpha: string): string {
 }
 
 /**
- * 달력 표시용 날짜별 표식을 만든다.
- * 기간 일정은 기간 안의 모든 날짜 칸에 제목을 보여주되, 보고 있는 달 범위 안에서만 계산한다.
- * 한 칸 안의 순서는 아래 목록과 같게 — 종일 일정 먼저, 그다음 시작 시각 순.
+ * 달력 칸에 보여줄 날짜별 내용을 만든다.
+ * - 시간 있는 하루 일정 → timed(색 막대 + 제목), 종일·여러 날 일정 → band(색 띠)
+ * - 여러 날 일정은 칸마다 start / mid / end 위치를 매겨 띠를 이어 그릴 수 있게 한다
+ * - 보고 있는 달 범위 안에서만 계산한다
+ * 칸 안 순서: 여러 날 일정(시작일 빠른 순) → 종일 일정 → 시간 있는 일정(시각 순).
+ * 여러 날 일정을 늘 맨 위에 두어야 이어지는 띠가 칸마다 같은 줄에 놓인다.
  */
 function buildMarks(year: number, month: number, schedules: ScheduleItem[], txs: Transaction[]): Record<string, DayMark> {
   const marks: Record<string, DayMark> = {};
-  const get = (d: string) => (marks[d] ??= { schedules: [], income: false, expense: false });
+  const get = (d: string) => (marks[d] ??= { events: [], income: 0, expense: 0 });
   const monthStart = toDateStr(year, month, 1);
   const monthEnd = toDateStr(year, month, new Date(year, month, 0).getDate());
 
-  const byDate: Record<string, ScheduleItem[]> = {};
+  type Placed = CellEvent & { order: string };
+  const byDate: Record<string, Placed[]> = {};
   for (const s of schedules) {
+    const last = lastDayOf(s);
+    const multi = last !== s.date;
+    const color = s.color || SCHEDULE_COLORS[0];
     const from = s.date > monthStart ? s.date : monthStart;
-    const to = lastDayOf(s) < monthEnd ? lastDayOf(s) : monthEnd;
+    const to = last < monthEnd ? last : monthEnd;
     for (let d = parseDate(from); ; d.setDate(d.getDate() + 1)) {
       const ds = toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate());
       if (ds > to) break;
-      (byDate[ds] ??= []).push(s);
+      const span: CellEvent["span"] = !multi ? "single" : ds === s.date ? "start" : ds === last ? "end" : "mid";
+      const kind: CellEvent["kind"] = multi || !s.time ? "band" : "timed";
+      // 정렬 키: 0=여러 날(시작일), 1=종일, 2=시간 있는 일정(시각)
+      const order = multi ? `0${s.date}` : !s.time ? "1" : `2${s.time}`;
+      (byDate[ds] ??= []).push({ id: s.id, title: s.title, color, kind, span, order });
     }
   }
   for (const [date, items] of Object.entries(byDate)) {
-    get(date).schedules = sortForDate(items, date).map((s) => ({
-      id: s.id,
-      title: s.title,
-      color: s.color || SCHEDULE_COLORS[0],
-    }));
+    get(date).events = items
+      .sort((a, b) => a.order.localeCompare(b.order) || a.id - b.id)
+      .map(({ order: _order, ...ev }) => ev);
   }
   for (const t of txs) {
     const m = get(t.date);
-    if (t.type === "income") m.income = true;
-    else m.expense = true;
+    if (t.type === "income") m.income += t.amount;
+    else m.expense += t.amount;
   }
   return marks;
 }
@@ -479,14 +484,12 @@ function DetailSection({ title, right, children, colors }: { title: string; righ
 }
 
 function DayDetailSheet({
-  visible, onClose, date, schedules, todoCount, doneCount, txs, labels, colors,
+  visible, onClose, date, schedules, txs, labels, colors,
 }: {
   visible: boolean;
   onClose: () => void;
   date: string;
   schedules: ScheduleItem[];
-  todoCount: number;
-  doneCount: number;
   txs: Transaction[];
   labels: ColorLabels;
   colors: ThemeColors;
@@ -511,11 +514,6 @@ function DayDetailSheet({
         ))}
       </DetailSection>
 
-      <DetailSection colors={colors} title="할 일" right={todoCount ? `${doneCount}/${todoCount} 완료` : undefined}>
-        <Text style={[styles.detailEmpty, { color: colors.subtext }]}>
-          {todoCount ? `할 일 ${todoCount}개 중 ${doneCount}개를 끝냈어요.` : "할 일이 없습니다."}
-        </Text>
-      </DetailSection>
 
       <DetailSection colors={colors} title="지출" right={expenses.length ? `-${formatAmount(sum(expenses))}` : undefined}>
         {expenses.length === 0 ? (
@@ -560,15 +558,12 @@ export default function ScheduleScreen() {
     add: addTransaction, update: updateTransaction, remove: removeTransaction,
   } = useBudgetStore();
 
-  const { selectedTodos, selectedRoutines, loadDate: loadTodosForDate } = useTodoStore();
 
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [editSchedule, setEditSchedule] = useState<ScheduleItem | undefined>();
   const [budgetModalVisible, setBudgetModalVisible] = useState(false);
   const [budgetInitialType, setBudgetInitialType] = useState<"income" | "expense">("expense");
   const [editTransaction, setEditTransaction] = useState<Transaction | undefined>();
-  const [todoSheetVisible, setTodoSheetVisible] = useState(false);
-  const [editRoutine, setEditRoutine] = useState<{ id: number; title: string; weekdays: string } | undefined>();
   const [detailVisible, setDetailVisible] = useState(false);
   const [jumpVisible, setJumpVisible] = useState(false);
   // 달력의 '오늘' 기준 — 앱을 켜 둔 채 자정이 지나도 다시 그려지도록 상태로 둔다 (수정 2번)
@@ -582,11 +577,6 @@ export default function ScheduleScreen() {
     loadColorLabels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // 날짜를 고를 때마다 그날의 할 일·루틴을 불러온다 (피드백 2번)
-  useEffect(() => {
-    loadTodosForDate(selectedDate);
-  }, [selectedDate, loadTodosForDate]);
 
   // 백그라운드에서 돌아왔을 때 날짜가 바뀌었으면 오늘 표시를 갱신하고,
   // 어제(=그때의 오늘)를 보고 있었다면 새 오늘로 옮긴다
@@ -613,6 +603,12 @@ export default function ScheduleScreen() {
     const [y, m] = date.split("-").map(Number);
     await loadBudgetMonth(y, m);
   }, [goToDate, loadBudgetMonth]);
+
+  // 달력 칸 탭: 이번 달 날짜는 선택만, 앞뒤 달 날짜는 그 달로 이동하면서 선택
+  const handleSelectDate = useCallback((date: string) => {
+    if (date.startsWith(`${year}-${String(month).padStart(2, "0")}`)) selectDate(date);
+    else handleJump(date);
+  }, [year, month, selectDate, handleJump]);
 
   const changeMonth = useCallback((delta: -1 | 1) => {
     const next = shiftMonth(year, month, delta);
@@ -642,16 +638,10 @@ export default function ScheduleScreen() {
     ]);
   };
 
-  const handleEditRoutine = useCallback((r: RoutineForDate) => {
-    setEditRoutine({ id: r.id, title: r.title, weekdays: r.weekdays });
-    setTodoSheetVisible(true);
-  }, []);
-
   const isToday = selectedDate === today;
   const isThisMonth = (() => { const d = new Date(); return year === d.getFullYear() && month === d.getMonth() + 1; })();
-  const todoTotal = selectedTodos.length + selectedRoutines.length;
-  const todoDone = [...selectedTodos, ...selectedRoutines].filter((t) => t.done).length;
-  const totalCount = selectedDateSchedules.length + todoTotal + selectedDateTransactions.length;
+  // 할 일은 홈에서만 다룬다 — 일정 탭에는 일정과 수입·지출만 보여준다
+  const totalCount = selectedDateSchedules.length + selectedDateTransactions.length;
 
   const dayIncome = selectedDateTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const dayExpense = selectedDateTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -693,7 +683,7 @@ export default function ScheduleScreen() {
       >
         <MonthCalendar
           year={year} month={month} selectedDate={selectedDate} marks={marks} today={today}
-          onSelectDate={selectDate} onSwipeMonth={changeMonth} colors={colors}
+          onSelectDate={handleSelectDate} onSwipeMonth={changeMonth} colors={colors}
         />
 
         {/* 선택한 날짜 바 — 고정될 때 뒤 내용이 비치지 않도록 배경색을 칠한다 */}
@@ -722,7 +712,7 @@ export default function ScheduleScreen() {
 
         {isLoaded && totalCount === 0 ? (
           <View style={styles.empty}>
-            <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·할 일·거래 내역이 없습니다.</Text>
+            <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·거래 내역이 없습니다.</Text>
             <Text style={[styles.emptyHint, { color: colors.subtext }]}>+ 추가 버튼으로 추가하세요</Text>
           </View>
         ) : (
@@ -747,15 +737,6 @@ export default function ScheduleScreen() {
               </>
             )}
 
-            {todoTotal > 0 && (
-              <>
-                <Text style={[styles.sectionTitle, { color: colors.subtext }]}>할 일</Text>
-                <TodoList
-                  todos={selectedTodos} routines={selectedRoutines} date={selectedDate}
-                  colors={colors} onEditRoutine={handleEditRoutine}
-                />
-              </>
-            )}
 
             {selectedDateTransactions.length > 0 && (
               <>
@@ -811,13 +792,6 @@ export default function ScheduleScreen() {
         initialData={editTransaction}
       />
 
-      <TodoAddSheet
-        visible={todoSheetVisible}
-        onClose={() => { setTodoSheetVisible(false); setEditRoutine(undefined); }}
-        initialDate={selectedDate}
-        editRoutine={editRoutine}
-        colors={colors}
-      />
 
       <DateJumpSheet
         visible={jumpVisible}
@@ -832,8 +806,6 @@ export default function ScheduleScreen() {
         onClose={() => setDetailVisible(false)}
         date={selectedDate}
         schedules={selectedDateSchedules}
-        todoCount={todoTotal}
-        doneCount={todoDone}
         txs={selectedDateTransactions}
         labels={colorLabels}
         colors={colors}
