@@ -1,14 +1,15 @@
 /**
  * 일정 탭 메인 달력
  *
- * 피드백 반영:
- *  3번  오늘 = 테두리 원만 (일정 색과 헷갈리지 않게). 선택한 날 = 채운 원.
- *  5번  달력을 좌우로 밀면 이전/다음 달로 이동.
- *  10번 날짜 아래 짧은 막대 — 지출 있으면 빨강, 수입 있으면 초록.
- *  16번 일정 점은 그 일정에 고른 색상 그대로 (같은 날 여러 색이면 최대 3개).
+ * - 오늘 = 테두리 원, 선택한 날 = 채운 원.
+ * - 좌우로 밀면 이전/다음 달로 이동.
+ * - 날짜 아래에 그날의 일정 제목을 일정 색상의 작은 띠로 보여준다 (최대 2개, 나머지는 +N).
+ *   제목이 칸보다 길면 한 줄에서 '…'로 잘라 옆 날짜 칸을 침범하지 않게 한다.
+ * - 칸 맨 아래 짧은 막대 — 지출 있으면 빨강, 수입 있으면 초록.
  *
+ * 한 주씩 줄로 그린다. 칸 너비를 '100/7 %' + 줄바꿈으로 두면 기기에 따라
+ * 7번째 칸이 다음 줄로 밀려 날짜와 요일이 어긋났다.
  * 스와이프는 PanResponder(React Native 기본 기능)로 구현해 새 라이브러리가 필요 없다.
- * 가로로 충분히 움직였을 때만 스와이프로 가로채므로 날짜 탭은 그대로 동작한다.
  */
 
 import { useRef } from "react";
@@ -18,7 +19,7 @@ import { Colors } from "@/constants/theme";
 import { buildCalendarWeeks, toDateStr, WEEKDAYS_KO } from "@/src/utils/date";
 
 export interface DayMark {
-  scheduleColors: string[];   // 그날 일정들의 색 (중복 제거, 최대 3개로 잘라서 표시)
+  schedules: { id: number; title: string; color: string }[];   // 그날에 걸친 일정 (시간순)
   income: boolean;
   expense: boolean;
 }
@@ -34,8 +35,8 @@ interface MonthCalendarProps {
   colors: typeof Colors.light;
 }
 
-const SWIPE_DISTANCE = 50;   // 이만큼 밀어야 달이 넘어간다
-const MAX_SCHEDULE_DOTS = 3;
+const SWIPE_DISTANCE = 50;      // 이만큼 밀어야 달이 넘어간다
+const MAX_TITLES = 2;           // 칸 안에 보여줄 일정 제목 수 — 넘치면 '+N'
 
 export function MonthCalendar({ year, month, selectedDate, today, marks, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
   const weeks = buildCalendarWeeks(year, month);
@@ -57,31 +58,32 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, onSelec
 
   return (
     <View style={styles.calendar} {...pan.panHandlers}>
-      <View style={styles.weekdayRow}>
+      <View style={styles.weekRow}>
         {WEEKDAYS_KO.map((w, i) => (
           <Text key={w} style={[styles.weekdayText, { color: i === 0 ? colors.expense : i === 6 ? "#3B82F6" : colors.subtext }]}>
             {w}
           </Text>
         ))}
       </View>
-      {/* 한 주씩 줄로 그린다 — 퍼센트 너비 + 줄바꿈 방식은 기기에 따라 7번째 칸이 밀려 날짜가 어긋났다 */}
       {weeks.map((week, wi) => (
-        <View key={wi} style={styles.weekRow}>
+        <View key={wi} style={[styles.weekRow, styles.weekLine, { borderTopColor: colors.separator }]}>
           {week.map((day, dow) => {
             if (day === null) return <View key={`e${dow}`} style={styles.cell} />;
             const date = toDateStr(year, month, day);
             const isSelected = date === selectedDate;
             const isToday = date === today;
             const mark = marks[date];
+            const shown = mark?.schedules.slice(0, MAX_TITLES) ?? [];
+            const hidden = (mark?.schedules.length ?? 0) - shown.length;
             const baseColor = dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
-  
+
             return (
               <TouchableOpacity
                 key={date}
-                style={styles.cell}
+                style={[styles.cell, isSelected && { backgroundColor: colors.tintLight }]}
                 onPress={() => onSelectDate(date)}
                 activeOpacity={0.6}
-                accessibilityLabel={`${month}월 ${day}일${isToday ? ", 오늘" : ""}`}
+                accessibilityLabel={`${month}월 ${day}일${isToday ? ", 오늘" : ""}${mark?.schedules.length ? `, 일정 ${mark.schedules.length}개` : ""}`}
                 accessibilityState={{ selected: isSelected }}
               >
                 <View style={[
@@ -97,15 +99,24 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, onSelec
                     {day}
                   </Text>
                 </View>
-                {/* 점은 원 바깥(아래)에 두어 선택 상태에서도 원래 색이 보이게 한다 */}
-                <View style={styles.dots}>
-                  {mark?.scheduleColors.slice(0, MAX_SCHEDULE_DOTS).map((c) => (
-                    <View key={c} style={[styles.dot, { backgroundColor: c }]} />
-                  ))}
-                  {/* 수입·지출은 짧은 막대 — 빨강·초록 일정 점과 모양으로도 구분되게 한다 */}
-                  {mark?.expense && <View style={[styles.moneyMark, { backgroundColor: colors.expense }]} />}
-                  {mark?.income && <View style={[styles.moneyMark, { backgroundColor: colors.income }]} />}
-                </View>
+
+                {/* 일정 제목 — 칸 너비를 넘으면 한 줄에서 '…'로 잘린다 */}
+                {shown.map((s) => (
+                  <View key={s.id} style={[styles.titleChip, { backgroundColor: `${s.color}2E` }]}>
+                    <Text style={[styles.titleText, { color: s.color }]} numberOfLines={1} ellipsizeMode="tail">
+                      {s.title}
+                    </Text>
+                  </View>
+                ))}
+                {hidden > 0 && <Text style={[styles.moreText, { color: colors.subtext }]}>+{hidden}</Text>}
+
+                {/* 수입·지출은 칸 맨 아래 짧은 막대 */}
+                {(mark?.expense || mark?.income) && (
+                  <View style={styles.moneyRow}>
+                    {mark.expense && <View style={[styles.moneyMark, { backgroundColor: colors.expense }]} />}
+                    {mark.income && <View style={[styles.moneyMark, { backgroundColor: colors.income }]} />}
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -116,15 +127,19 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, onSelec
 }
 
 const styles = StyleSheet.create({
-  calendar: { paddingHorizontal: 12, marginBottom: 4 },
-  weekdayRow: { flexDirection: "row", marginBottom: 4 },
-  weekdayText: { flex: 1, textAlign: "center", fontSize: 12, fontWeight: "600" },
+  calendar: { paddingHorizontal: 8, marginBottom: 4 },
   weekRow: { flexDirection: "row" },
-  cell: { flex: 1, height: 50, alignItems: "center", paddingTop: 3 },
-  dayCircle: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  dayText: { fontSize: 15 },
+  // 주마다 옅은 가로선 — 칸이 커지면서 어느 날짜의 일정인지 구분이 쉬워진다
+  weekLine: { borderTopWidth: StyleSheet.hairlineWidth },
+  weekdayText: { flex: 1, textAlign: "center", fontSize: 12, fontWeight: "600", marginBottom: 4 },
+  // minWidth 0: 긴 제목이 칸을 밀어 넓히지 않고 칸 너비 안에서 잘리게 한다
+  cell: { flex: 1, minWidth: 0, height: 80, alignItems: "center", paddingTop: 3, paddingHorizontal: 1, gap: 2, borderRadius: 6 },
+  dayCircle: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  dayText: { fontSize: 14 },
   dayTextBold: { fontWeight: "700" },
-  dots: { flexDirection: "row", alignItems: "center", gap: 2, marginTop: 3, height: 5 },
-  dot: { width: 5, height: 5, borderRadius: 2.5 },
+  titleChip: { alignSelf: "stretch", borderRadius: 3, paddingHorizontal: 2, paddingVertical: 1 },
+  titleText: { fontSize: 9.5, fontWeight: "600" },
+  moreText: { fontSize: 9, fontWeight: "600" },
+  moneyRow: { position: "absolute", bottom: 3, flexDirection: "row", gap: 2 },
   moneyMark: { width: 8, height: 3, borderRadius: 1.5 },
 });

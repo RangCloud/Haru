@@ -46,7 +46,7 @@ import { useScheduleStore } from "@/src/store/scheduleStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { formatMonthDay, parseDate, shiftMonth, toDateStr, todayString } from "@/src/utils/date";
 import { scheduleEventNotification } from "@/src/utils/notifications";
-import { lastDayOf, periodLabel, timeLabelOn } from "@/src/utils/scheduleText";
+import { lastDayOf, periodLabel, sortForDate, timeLabelOn } from "@/src/utils/scheduleText";
 
 type ThemeColors = (typeof Colors)["light"];
 
@@ -76,24 +76,31 @@ function withAlpha(hex: string, alpha: string): string {
 
 /**
  * 달력 표시용 날짜별 표식을 만든다.
- * 기간 일정은 기간 안의 모든 날짜에 색 점을 찍되, 보고 있는 달 범위 안에서만 계산한다.
+ * 기간 일정은 기간 안의 모든 날짜 칸에 제목을 보여주되, 보고 있는 달 범위 안에서만 계산한다.
+ * 한 칸 안의 순서는 아래 목록과 같게 — 종일 일정 먼저, 그다음 시작 시각 순.
  */
 function buildMarks(year: number, month: number, schedules: ScheduleItem[], txs: Transaction[]): Record<string, DayMark> {
   const marks: Record<string, DayMark> = {};
-  const get = (d: string) => (marks[d] ??= { scheduleColors: [], income: false, expense: false });
+  const get = (d: string) => (marks[d] ??= { schedules: [], income: false, expense: false });
   const monthStart = toDateStr(year, month, 1);
   const monthEnd = toDateStr(year, month, new Date(year, month, 0).getDate());
 
+  const byDate: Record<string, ScheduleItem[]> = {};
   for (const s of schedules) {
     const from = s.date > monthStart ? s.date : monthStart;
     const to = lastDayOf(s) < monthEnd ? lastDayOf(s) : monthEnd;
     for (let d = parseDate(from); ; d.setDate(d.getDate() + 1)) {
       const ds = toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate());
       if (ds > to) break;
-      const m = get(ds);
-      const color = s.color || SCHEDULE_COLORS[0];
-      if (!m.scheduleColors.includes(color)) m.scheduleColors.push(color);
+      (byDate[ds] ??= []).push(s);
     }
+  }
+  for (const [date, items] of Object.entries(byDate)) {
+    get(date).schedules = sortForDate(items, date).map((s) => ({
+      id: s.id,
+      title: s.title,
+      color: s.color || SCHEDULE_COLORS[0],
+    }));
   }
   for (const t of txs) {
     const m = get(t.date);
@@ -676,88 +683,97 @@ export default function ScheduleScreen() {
         </TouchableOpacity>
       </View>
 
-      <MonthCalendar
-        year={year} month={month} selectedDate={selectedDate} marks={marks} today={today}
-        onSelectDate={selectDate} onSwipeMonth={changeMonth} colors={colors}
-      />
+      {/* 달력이 커져서 달력과 그날 목록을 한 번에 스크롤한다.
+          날짜 바(한눈에 보기·추가)는 stickyHeaderIndices로 스크롤해도 위에 고정된다. */}
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        stickyHeaderIndices={[1]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <MonthCalendar
+          year={year} month={month} selectedDate={selectedDate} marks={marks} today={today}
+          onSelectDate={selectDate} onSwipeMonth={changeMonth} colors={colors}
+        />
 
-      {/* 선택한 날짜 바 */}
-      <View style={[styles.selectedDateBar, { borderTopColor: colors.separator }]}>
-        <Text style={[styles.selectedDateText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
-        </Text>
-        <View style={styles.barActions}>
-          <TouchableOpacity
-            onPress={() => setDetailVisible(true)}
-            style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
-            accessibilityLabel="이 날짜 한눈에 보기"
-          >
-            <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
-          </TouchableOpacity>
-          {/* 추가 버튼 — 화면 아래에 떠 있으면 목록(수입·지출 등)을 가려서 날짜 바로 옮겼다 */}
-          <TouchableOpacity
-            onPress={handleFabPress}
-            style={[styles.addBtn, { backgroundColor: colors.tint }]}
-            accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
-          >
-            <Text style={styles.addBtnText}>+ 추가</Text>
-          </TouchableOpacity>
+        {/* 선택한 날짜 바 — 고정될 때 뒤 내용이 비치지 않도록 배경색을 칠한다 */}
+        <View style={[styles.selectedDateBar, { borderTopColor: colors.separator, backgroundColor: colors.background }]}>
+          <Text style={[styles.selectedDateText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
+          </Text>
+          <View style={styles.barActions}>
+            <TouchableOpacity
+              onPress={() => setDetailVisible(true)}
+              style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
+              accessibilityLabel="이 날짜 한눈에 보기"
+            >
+              <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
+            </TouchableOpacity>
+            {/* 추가 버튼 — 화면 아래에 떠 있으면 목록(수입·지출 등)을 가려서 날짜 바로 옮겼다 */}
+            <TouchableOpacity
+              onPress={handleFabPress}
+              style={[styles.addBtn, { backgroundColor: colors.tint }]}
+              accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
+            >
+              <Text style={styles.addBtnText}>+ 추가</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      {isLoaded && totalCount === 0 ? (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·할 일·거래 내역이 없습니다.</Text>
-          <Text style={[styles.emptyHint, { color: colors.subtext }]}>오른쪽 위 + 추가 버튼으로 추가하세요</Text>
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.listContent}>
-          {(dayIncome > 0 || dayExpense > 0) && (
-            <View style={[styles.daySummary, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
-              {dayIncome > 0 && <Text style={[styles.daySummaryText, { color: colors.income }]}>수입 +{formatAmount(dayIncome)}</Text>}
-              {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
-            </View>
-          )}
+        {isLoaded && totalCount === 0 ? (
+          <View style={styles.empty}>
+            <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·할 일·거래 내역이 없습니다.</Text>
+            <Text style={[styles.emptyHint, { color: colors.subtext }]}>+ 추가 버튼으로 추가하세요</Text>
+          </View>
+        ) : (
+          <View style={styles.listContent}>
+            {(dayIncome > 0 || dayExpense > 0) && (
+              <View style={[styles.daySummary, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+                {dayIncome > 0 && <Text style={[styles.daySummaryText, { color: colors.income }]}>수입 +{formatAmount(dayIncome)}</Text>}
+                {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
+              </View>
+            )}
 
-          {selectedDateSchedules.length > 0 && (
-            <>
-              <Text style={[styles.sectionTitle, { color: colors.subtext }]}>일정</Text>
-              {selectedDateSchedules.map((s) => (
-                <ScheduleRow
-                  key={s.id} item={s} date={selectedDate} label={colorLabels[s.color]} colors={colors}
-                  onDelete={() => removeSchedule(s.id)}
-                  onEdit={() => { setEditSchedule(s); setScheduleModalVisible(true); }}
+            {selectedDateSchedules.length > 0 && (
+              <>
+                <Text style={[styles.sectionTitle, { color: colors.subtext }]}>일정</Text>
+                {selectedDateSchedules.map((s) => (
+                  <ScheduleRow
+                    key={s.id} item={s} date={selectedDate} label={colorLabels[s.color]} colors={colors}
+                    onDelete={() => removeSchedule(s.id)}
+                    onEdit={() => { setEditSchedule(s); setScheduleModalVisible(true); }}
+                  />
+                ))}
+              </>
+            )}
+
+            {todoTotal > 0 && (
+              <>
+                <Text style={[styles.sectionTitle, { color: colors.subtext }]}>할 일</Text>
+                <TodoList
+                  todos={selectedTodos} routines={selectedRoutines} date={selectedDate}
+                  colors={colors} onEditRoutine={handleEditRoutine}
                 />
-              ))}
-            </>
-          )}
+              </>
+            )}
 
-          {todoTotal > 0 && (
-            <>
-              <Text style={[styles.sectionTitle, { color: colors.subtext }]}>할 일</Text>
-              <TodoList
-                todos={selectedTodos} routines={selectedRoutines} date={selectedDate}
-                colors={colors} onEditRoutine={handleEditRoutine}
-              />
-            </>
-          )}
+            {selectedDateTransactions.length > 0 && (
+              <>
+                <Text style={[styles.sectionTitle, { color: colors.subtext }]}>수입·지출</Text>
+                {selectedDateTransactions.map((t) => (
+                  <TransactionRow
+                    key={t.id} item={t} colors={colors}
+                    onDelete={() => removeTransaction(t.id)}
+                    onEdit={() => { setEditTransaction(t); setBudgetModalVisible(true); }}
+                  />
+                ))}
+              </>
+            )}
 
-          {selectedDateTransactions.length > 0 && (
-            <>
-              <Text style={[styles.sectionTitle, { color: colors.subtext }]}>수입·지출</Text>
-              {selectedDateTransactions.map((t) => (
-                <TransactionRow
-                  key={t.id} item={t} colors={colors}
-                  onDelete={() => removeTransaction(t.id)}
-                  onEdit={() => { setEditTransaction(t); setBudgetModalVisible(true); }}
-                />
-              ))}
-            </>
-          )}
-
-          <Text style={[styles.hintText, { color: colors.subtext }]}>항목을 길게 눌러 수정·삭제</Text>
-        </ScrollView>
-      )}
+            <Text style={[styles.hintText, { color: colors.subtext }]}>항목을 길게 눌러 수정·삭제</Text>
+          </View>
+        )}
+      </ScrollView>
 
       <ScheduleModal
         visible={scheduleModalVisible}
@@ -870,7 +886,9 @@ const styles = StyleSheet.create({
   addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   detailBtnText: { fontSize: 12, fontWeight: "600" },
   // ── 목록 ──────────────────────────────────────────────────
-  listContent: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },
+  body: { flex: 1 },
+  bodyContent: { paddingBottom: 32 },
+  listContent: { paddingHorizontal: 24, gap: 8 },
   sectionTitle: { fontSize: 12, fontWeight: "600", letterSpacing: 0.5, marginTop: 6 },
   daySummary: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
   daySummaryText: { fontSize: 13, fontWeight: "600" },
@@ -887,7 +905,7 @@ const styles = StyleSheet.create({
   txBadgeText: { fontSize: 11, fontWeight: "600" },
   txNote: { flex: 1, fontSize: 14 },
   txAmount: { fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingBottom: 40, gap: 6 },
+  empty: { justifyContent: "center", alignItems: "center", paddingVertical: 32, gap: 6 },
   emptyText: { fontSize: 15 },
   emptyHint: { fontSize: 13 },
   hintText: { fontSize: 11, textAlign: "center", paddingTop: 8 },

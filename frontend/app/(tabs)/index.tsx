@@ -1,6 +1,6 @@
 /**
  * 홈 화면
- * 날씨 위젯(우상단) + 오늘 일정 → 투두리스트 → 이달 가계부 요약
+ * 날씨 위젯(우상단) + 오늘 일정 → 투두리스트 → 월별 가계부 요약(‹ › 로 달 이동)
  * 톱니바퀴(⚙) 탭 → 설정 시트 (테마·시작 화면·계정·로그아웃)
  */
 
@@ -33,6 +33,7 @@ import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
 import { requestNotificationPermission } from "@/src/utils/notifications";
+import { shiftMonth } from "@/src/utils/date";
 import { timeLabelOn } from "@/src/utils/scheduleText";
 import { writeWidgetData } from "@/src/utils/widgetData";
 
@@ -236,21 +237,49 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
 
 // ── 가계부 요약 카드 ──────────────────────────────────────────
 
-// 피드백 11번: 잔액 대신 수입 총액·지출 총액 두 가지만 크게 보여준다
+// 수입 총액·지출 총액을 보여주고, ‹ › 로 다른 달을 볼 수 있다
 function BudgetSummaryCard({
-  income, expense, colors,
+  year, month, income, expense, onMove, colors,
 }: {
+  year: number; month: number;
   income: number; expense: number;
+  onMove: (delta: -1 | 1) => void;
   colors: typeof Colors.light;
 }) {
+  const now = new Date();
+  const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
+
+  // '자세히' → 일정 탭 달력도 같은 달로 옮겨서 그 달 내역을 바로 보게 한다
+  const openDetail = async () => {
+    const date = isCurrent ? todayString() : `${year}-${String(month).padStart(2, "0")}-01`;
+    router.push("/(tabs)/schedule");
+    await useScheduleStore.getState().goToDate(date);
+    await useBudgetStore.getState().loadMonth(year, month);
+  };
+
   return (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}
-      onPress={() => router.push("/(tabs)/schedule")}
+      onPress={openDetail}
       activeOpacity={0.75}
     >
       <View style={styles.cardHeader}>
-        <Text style={[styles.cardLabel, { color: colors.subtext }]}>이달 가계부</Text>
+        <View style={styles.monthNav}>
+          <TouchableOpacity onPress={() => onMove(-1)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }} accessibilityLabel="이전 달 가계부">
+            <Text style={[styles.monthArrow, { color: colors.tint }]}>‹</Text>
+          </TouchableOpacity>
+          <Text style={[styles.cardLabel, { color: colors.text }]}>
+            {year === now.getFullYear() ? "" : `${year}년 `}{month}월 가계부
+          </Text>
+          <TouchableOpacity onPress={() => onMove(1)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }} accessibilityLabel="다음 달 가계부">
+            <Text style={[styles.monthArrow, { color: colors.tint }]}>›</Text>
+          </TouchableOpacity>
+          {isCurrent && (
+            <View style={[styles.thisMonthPill, { backgroundColor: colors.tintLight }]}>
+              <Text style={[styles.thisMonthText, { color: colors.tint }]}>이번 달</Text>
+            </View>
+          )}
+        </View>
         <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
       </View>
       <View style={styles.budgetRow}>
@@ -420,7 +449,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   // 홈은 항상 "이번 달·오늘" 기준 — 일정 탭에서 다른 달로 넘겨도 영향받지 않는 전용 값을 쓴다
-  const { thisMonthIncome, thisMonthExpense, loadThisMonth } = useBudgetStore();
+  const { homeYear, homeMonth, homeIncome, homeExpense, loadHomeMonth } = useBudgetStore();
   const { todaySchedules, loadToday } = useScheduleStore();
   const { load: loadTodos } = useTodoStore();
 
@@ -429,7 +458,8 @@ export default function HomeScreen() {
   const lastActiveDateRef = useRef(todayString());
 
   useEffect(() => {
-    loadThisMonth();
+    const now = new Date();
+    loadHomeMonth(now.getFullYear(), now.getMonth() + 1);
     loadToday();
     loadTodos();
 
@@ -442,7 +472,9 @@ export default function HomeScreen() {
         const currentDate = todayString();
         loadTodos();
         if (currentDate !== lastActiveDateRef.current) {
-          loadThisMonth();
+          // 날짜가 바뀌면(특히 새 달이 되면) 가계부 카드를 이번 달로 되돌린다
+          const d = new Date();
+          loadHomeMonth(d.getFullYear(), d.getMonth() + 1);
           loadToday();
           lastActiveDateRef.current = currentDate;
         }
@@ -450,7 +482,7 @@ export default function HomeScreen() {
     });
     return () => sub.remove();
     // Zustand store 액션은 안정적 참조 — 의존성에 포함해도 무한 루프 없음
-  }, [loadThisMonth, loadToday, loadTodos]);
+  }, [loadHomeMonth, loadToday, loadTodos]);
 
   const today = todayString();
 
@@ -507,8 +539,14 @@ export default function HomeScreen() {
       <TodoCard colors={colors} />
 
       {/* 가계부 요약 — 일정·할 일보다 부차적인 정보 */}
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>이번 달</Text>
-      <BudgetSummaryCard income={thisMonthIncome} expense={thisMonthExpense} colors={colors} />
+      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>가계부</Text>
+      <BudgetSummaryCard
+        year={homeYear} month={homeMonth} income={homeIncome} expense={homeExpense} colors={colors}
+        onMove={(delta) => {
+          const next = shiftMonth(homeYear, homeMonth, delta);
+          loadHomeMonth(next.year, next.month);
+        }}
+      />
 
       {/* 설정 모달 */}
       <SettingsModal
@@ -562,6 +600,10 @@ const styles = StyleSheet.create({
   },
   cardLabel: { fontSize: 13, fontWeight: "600", letterSpacing: 0.2 },
   cardLink: { fontSize: 13 },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthArrow: { fontSize: 22, fontWeight: "400", lineHeight: 24 },
+  thisMonthPill: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  thisMonthText: { fontSize: 10, fontWeight: "700" },
   emptyText: { fontSize: 14 },
   // ── 가계부 ────────────────────────────────────────────────
   budgetRow: { flexDirection: "row", alignItems: "center" },
