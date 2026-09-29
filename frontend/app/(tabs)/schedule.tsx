@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Colors, cardShadow } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
@@ -686,27 +686,31 @@ export default function ScheduleScreen() {
           onSelectDate={handleSelectDate} onSwipeMonth={changeMonth} colors={colors}
         />
 
-        {/* 선택한 날짜 바 — 고정될 때 뒤 내용이 비치지 않도록 배경색을 칠한다 */}
-        <View style={[styles.selectedDateBar, { borderTopColor: colors.separator, backgroundColor: colors.background }]}>
-          <Text style={[styles.selectedDateText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-            {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
-          </Text>
-          <View style={styles.barActions}>
-            <TouchableOpacity
-              onPress={() => setDetailVisible(true)}
-              style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
-              accessibilityLabel="이 날짜 한눈에 보기"
-            >
-              <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
-            </TouchableOpacity>
-            {/* 추가 버튼 — 화면 아래에 떠 있으면 목록(수입·지출 등)을 가려서 날짜 바로 옮겼다 */}
-            <TouchableOpacity
-              onPress={handleFabPress}
-              style={[styles.addBtn, { backgroundColor: colors.tint }]}
-              accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
-            >
-              <Text style={styles.addBtnText}>+ 추가</Text>
-            </TouchableOpacity>
+        {/* 선택한 날짜 바 — 고정될 때 뒤 내용이 비치지 않도록 배경색을 칠한다.
+            고정 헤더(stickyHeaderIndices)는 바로 안쪽 요소의 style을 바깥 틀로 옮기고 그 요소를 flex: 1로 바꾼다.
+            그래서 가로 배치(flexDirection: row)를 한 겹 안쪽 View에 두어야 날짜와 버튼이 한 줄에 놓인다. */}
+        <View style={[styles.selectedDateSticky, { borderTopColor: colors.separator, backgroundColor: colors.background }]}>
+          <View style={styles.selectedDateBar}>
+            <Text style={[styles.selectedDateText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
+            </Text>
+            <View style={styles.barActions}>
+              <TouchableOpacity
+                onPress={() => setDetailVisible(true)}
+                style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
+                accessibilityLabel="이 날짜 한눈에 보기"
+              >
+                <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
+              </TouchableOpacity>
+              {/* 추가 버튼 — 화면 아래에 떠 있으면 목록(수입·지출 등)을 가려서 날짜 바로 옮겼다 */}
+              <TouchableOpacity
+                onPress={handleFabPress}
+                style={[styles.addBtn, { backgroundColor: colors.tint }]}
+                accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
+              >
+                <Text style={styles.addBtnText}>+ 추가</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -717,13 +721,6 @@ export default function ScheduleScreen() {
           </View>
         ) : (
           <View style={styles.listContent}>
-            {(dayIncome > 0 || dayExpense > 0) && (
-              <View style={[styles.daySummary, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
-                {dayIncome > 0 && <Text style={[styles.daySummaryText, { color: colors.income }]}>수입 +{formatAmount(dayIncome)}</Text>}
-                {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
-              </View>
-            )}
-
             {selectedDateSchedules.length > 0 && (
               <>
                 <Text style={[styles.sectionTitle, { color: colors.subtext }]}>일정</Text>
@@ -737,10 +734,16 @@ export default function ScheduleScreen() {
               </>
             )}
 
-
             {selectedDateTransactions.length > 0 && (
               <>
-                <Text style={[styles.sectionTitle, { color: colors.subtext }]}>수입·지출</Text>
+                {/* 제목 오른쪽에 그날 수입·지출 합계 */}
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionTitle, styles.sectionTitleInRow, { color: colors.subtext }]}>수입·지출</Text>
+                  <View style={styles.daySummary}>
+                    {dayIncome > 0 && <Text style={[styles.daySummaryText, { color: colors.income }]}>수입 +{formatAmount(dayIncome)}</Text>}
+                    {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
+                  </View>
+                </View>
                 {selectedDateTransactions.map((t) => (
                   <TransactionRow
                     key={t.id} item={t} colors={colors}
@@ -846,9 +849,10 @@ const styles = StyleSheet.create({
   labelDot: { width: 16, height: 16, borderRadius: 8 },
   labelInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14 },
   // ── 선택일 바 ─────────────────────────────────────────────
+  selectedDateSticky: { borderTopWidth: StyleSheet.hairlineWidth },
   selectedDateBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 24, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 24, paddingVertical: 10,
   },
   // 버튼 두 개와 한 줄에 놓이므로 좁은 화면에서는 날짜 글자가 줄어든다
   selectedDateText: { flexShrink: 1, fontSize: 15, fontWeight: "600", marginRight: 8 },
@@ -862,8 +866,10 @@ const styles = StyleSheet.create({
   bodyContent: { paddingBottom: 32 },
   listContent: { paddingHorizontal: 24, gap: 8 },
   sectionTitle: { fontSize: 12, fontWeight: "600", letterSpacing: 0.5, marginTop: 6 },
-  daySummary: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
-  daySummaryText: { fontSize: 13, fontWeight: "600" },
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
+  sectionTitleInRow: { marginTop: 0 },
+  daySummary: { flexDirection: "row", gap: 10 },
+  daySummaryText: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
   scheduleRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingLeft: 12, borderLeftWidth: 3, gap: 8 },
   scheduleMain: { flex: 1, gap: 3 },
   scheduleTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
