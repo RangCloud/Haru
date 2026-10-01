@@ -506,7 +506,7 @@ export default function ScheduleScreen() {
         <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="다음 달">
           <Text style={[styles.monthArrowText, { color: colors.tint }]}>›</Text>
         </TouchableOpacity>
-        {/* 오늘 버튼 — 이미 오늘을 보고 있으면 흐리게 */}
+        {/* 왼쪽: 오늘 버튼 — 이미 오늘을 보고 있으면 흐리게 */}
         <TouchableOpacity
           onPress={handleGoToday}
           style={[styles.todayBtn, { borderColor: colors.tint, opacity: isToday && isThisMonth ? 0.4 : 1 }]}
@@ -515,10 +515,18 @@ export default function ScheduleScreen() {
         >
           <Text style={[styles.todayBtnText, { color: colors.tint }]}>오늘</Text>
         </TouchableOpacity>
+        {/* 오른쪽: 추가 버튼 — 선택한 날짜에 일정·지출·수입 추가 */}
+        <TouchableOpacity
+          onPress={handleFabPress}
+          style={[styles.addBtn, { backgroundColor: colors.tint }]}
+          accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
+        >
+          <Text style={styles.addBtnText}>+ 추가</Text>
+        </TouchableOpacity>
       </View>
 
       {/* 달력이 커져서 달력과 그날 목록을 한 번에 스크롤한다.
-          날짜 바(한눈에 보기·추가)는 stickyHeaderIndices로 스크롤해도 위에 고정된다. */}
+          날짜 바(한눈에 보기)는 stickyHeaderIndices로 스크롤해도 위에 고정된다. */}
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
@@ -545,14 +553,6 @@ export default function ScheduleScreen() {
                 accessibilityLabel="이 날짜 한눈에 보기"
               >
                 <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
-              </TouchableOpacity>
-              {/* 추가 버튼 — 화면 아래에 떠 있으면 목록(수입·지출 등)을 가려서 날짜 바로 옮겼다 */}
-              <TouchableOpacity
-                onPress={handleFabPress}
-                style={[styles.addBtn, { backgroundColor: colors.tint }]}
-                accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
-              >
-                <Text style={styles.addBtnText}>+ 추가</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
   monthLabel: { fontSize: 20, fontWeight: "700", minWidth: 120, textAlign: "center" },
   monthCaret: { fontSize: 14 },
   // 월 제목 줄의 세로 가운데에 맞춘 오른쪽 끝 버튼 (제목이 가운데 정렬을 유지하도록 absolute)
-  todayBtn: { position: "absolute", right: 20, bottom: 22, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  todayBtn: { position: "absolute", left: 20, bottom: 22, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
   todayBtnText: { fontSize: 12, fontWeight: "600" },
   // ── 색상 선택 ─────────────────────────────────────────────
   colorSection: { gap: 6 },
@@ -702,7 +702,8 @@ const styles = StyleSheet.create({
   selectedDateText: { flexShrink: 1, fontSize: 15, fontWeight: "600", marginRight: 8 },
   barActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   detailBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
-  addBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  // 월 제목 줄 오른쪽 끝 — 오늘 버튼(왼쪽)과 같은 높이에 맞춘다
+  addBtn: { position: "absolute", right: 20, bottom: 20, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
   addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   detailBtnText: { fontSize: 12, fontWeight: "600" },
   // ── 목록 ──────────────────────────────────────────────────
