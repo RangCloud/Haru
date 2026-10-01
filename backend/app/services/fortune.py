@@ -56,6 +56,7 @@ def _make_cache_key(
     birth_month_type: str,
     birth_day: int | None,
     birth_hour: int | None,
+    birth_minute: int | None = None,
 ) -> str:
     """캐시 키를 생성한다 — 생년월일+오늘 날짜 조합으로 하루 1회 캐시를 보장한다"""
     today = _today()
@@ -63,6 +64,9 @@ def _make_cache_key(
     if birth_year is None or birth_month is None or birth_day is None:
         return f"{today}_general"
     hour_str = str(birth_hour) if birth_hour is not None else "unknown"
+    # 분까지 넣은 경우에만 키에 붙인다 — 예전 앱(시까지만 보냄)의 캐시 키는 그대로 유지
+    if birth_hour is not None and birth_minute is not None:
+        hour_str += f"_{birth_minute}"
     return f"{today}_{birth_year}_{birth_month}_{birth_month_type}_{birth_day}_{hour_str}"
 
 
@@ -73,6 +77,7 @@ def _build_prompt(
     birth_month_type: str,
     birth_day: int | None,
     birth_hour: int | None,
+    birth_minute: int | None = None,
 ) -> str:
     """생년월일 기반 개인화 운세 프롬프트를 생성한다"""
     # 생년월일 정보가 없으면 일반 운세
@@ -84,7 +89,12 @@ def _build_prompt(
         )
 
     month_type_label = "양력" if birth_month_type == "solar" else "음력"
-    hour_label = f"{birth_hour}시" if birth_hour is not None else "시간 모름"
+    if birth_hour is None:
+        hour_label = "시간 모름"
+    elif birth_minute is None:
+        hour_label = f"{birth_hour}시"
+    else:
+        hour_label = f"{birth_hour}시 {birth_minute}분"
 
     return (
         f"생년월일: {birth_year}년 {birth_month}월({month_type_label}) {birth_day}일, 태어난 시간: {hour_label}\n"
@@ -100,6 +110,7 @@ async def get_fortune(
     birth_month_type: str = "solar",
     birth_day: int | None = None,
     birth_hour: int | None = None,
+    birth_minute: int | None = None,
 ) -> FortuneResponse:
     """
     오늘의 운세를 반환한다.
@@ -109,7 +120,7 @@ async def get_fortune(
     캐시 미스: Claude 실제 호출 → 결과 캐시 저장 (cached=False)
     """
     today = _today()
-    cache_key = _make_cache_key(birth_year, birth_month, birth_month_type, birth_day, birth_hour)
+    cache_key = _make_cache_key(birth_year, birth_month, birth_month_type, birth_day, birth_hour, birth_minute)
 
     # 캐시 히트 → Claude 호출 없이 즉시 반환
     if cache_key in _cache:
@@ -123,7 +134,7 @@ async def get_fortune(
     # claude-haiku-4-5: 짧은 텍스트 생성에 최적화된 소형 모델 (비용 절감)
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-    prompt = _build_prompt(today, birth_year, birth_month, birth_month_type, birth_day, birth_hour)
+    prompt = _build_prompt(today, birth_year, birth_month, birth_month_type, birth_day, birth_hour, birth_minute)
 
     message = await client.messages.create(
         model="claude-haiku-4-5",

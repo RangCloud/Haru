@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     # 날씨 캐시 TTL(초) — 기상청 단기예보는 3시간마다 갱신되므로 1시간 캐시로 충분
     weather_cache_ttl: int = 3600
 
+    # 공공데이터포털(data.go.kr) 서비스키 — 한국천문연구원 '특일 정보'(공휴일) 조회에 사용
+    # 비어 있으면 공휴일 API는 빈 목록을 돌려주고 앱은 공휴일 없이 동작한다
+    holiday_api_key: str = ""
+
     # 네이버 오픈 API 인증 정보 — 뉴스 검색에 사용
     # 발급처: https://developers.naver.com → 애플리케이션 등록 → 검색 API 신청
     naver_client_id: str = ""

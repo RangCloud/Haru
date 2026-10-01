@@ -20,6 +20,7 @@ async def fortune(
     birth_month_type: str = Query(default="solar", description="양력(solar) 또는 음력(lunar)"),
     birth_day: int | None = Query(default=None, description="태어난 일 (1~31)"),
     birth_hour: int | None = Query(default=None, description="태어난 시간 (0~23), 모르면 생략"),
+    birth_minute: int | None = Query(default=None, description="태어난 분 (0~59), 시를 보낸 경우에만 사용"),
 ):
     """
     오늘의 운세를 반환한다.
@@ -42,6 +43,8 @@ async def fortune(
         raise HTTPException(status_code=422, detail="birth_day는 1~31 범위여야 합니다.")
     if birth_hour is not None and not (0 <= birth_hour <= 23):
         raise HTTPException(status_code=422, detail="birth_hour는 0~23 범위여야 합니다.")
+    if birth_minute is not None and not (0 <= birth_minute <= 59):
+        raise HTTPException(status_code=422, detail="birth_minute는 0~59 범위여야 합니다.")
 
     try:
         return await get_fortune(
@@ -50,6 +53,8 @@ async def fortune(
             birth_month_type=birth_month_type,
             birth_day=birth_day,
             birth_hour=birth_hour,
+            # 시를 모르면 분은 의미가 없으므로 버린다
+            birth_minute=birth_minute if birth_hour is not None else None,
         )
     except RuntimeError as e:
         # 레이트 리밋 초과 → 429 Too Many Requests

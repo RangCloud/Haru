@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import fortune, news, weather, social
+from app.api import fortune, holiday, news, weather, social
 from app.core.config import settings
 from app.db.database import init_db
 
@@ -55,6 +55,7 @@ app.include_router(weather.router, prefix="/api")
 app.include_router(news.router, prefix="/api")
 app.include_router(fortune.router, prefix="/api")
 app.include_router(social.router, prefix="/api")
+app.include_router(holiday.router, prefix="/api")
 
 
 @app.get("/health", tags=["시스템"])
