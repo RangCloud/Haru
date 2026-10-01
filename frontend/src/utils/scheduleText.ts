@@ -36,6 +36,20 @@ export function sortForDate<T extends Pick<ScheduleItem, "id" | "date" | "time">
   return [...items].sort((a, b) => key(a).localeCompare(key(b)) || a.id - b.id);
 }
 
+/**
+ * 그날 기준으로 이미 끝난 일정인지 — 홈 '오늘 일정'에서 지나간 일정을 흐리게 처리할 때 쓴다.
+ * - 종일 일정, 그리고 마지막 날이 아닌 기간 일정은 그날이 끝날 때까지 진행 중으로 본다
+ * - 끝나는 시각이 있으면 그 시각, 없으면 시작 시각이 지나면 끝난 것으로 본다
+ * - 기간 일정의 마지막 날에 끝나는 시각이 없으면 종일로 본다 (시작 시각은 첫날 기준이라 쓰지 않음)
+ * nowHHMM: 'HH:MM' (같은 길이의 문자열이라 문자열 비교로 시각을 비교할 수 있다)
+ */
+export function isPastOn(s: Timed, date: string, nowHHMM: string): boolean {
+  if (lastDayOf(s) !== date) return false;
+  const multiDay = lastDayOf(s) !== s.date;
+  const endAt = s.end_time || (multiDay ? "" : s.time);
+  return endAt !== "" && nowHHMM >= endAt;
+}
+
 // ── 표시 문구 ─────────────────────────────────────────────────
 
 /** 오른쪽 시간 칸 문구 */

@@ -62,6 +62,17 @@ export async function toggleTodo(id: number, done: boolean): Promise<void> {
   await db.runAsync("UPDATE todos SET done = ? WHERE id = ?", [done ? 1 : 0, id]);
 }
 
+/** 내용·날짜·중요 표시를 바꾼다 (넘긴 값만 수정) */
+export async function updateTodo(
+  id: number,
+  fields: { title?: string; date?: string; important?: boolean },
+): Promise<void> {
+  const db = await getDatabase();
+  if (fields.title !== undefined) await db.runAsync("UPDATE todos SET title = ? WHERE id = ?", [fields.title.trim(), id]);
+  if (fields.date !== undefined) await db.runAsync("UPDATE todos SET date = ? WHERE id = ?", [fields.date, id]);
+  if (fields.important !== undefined) await db.runAsync("UPDATE todos SET important = ? WHERE id = ?", [fields.important ? 1 : 0, id]);
+}
+
 /** 중요 표시를 바꾼다 */
 export async function setTodoImportant(id: number, important: boolean): Promise<void> {
   const db = await getDatabase();

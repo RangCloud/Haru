@@ -63,11 +63,11 @@ export async function getRoutinesForDate(date: string): Promise<RoutineForDate[]
 
 // ── 추가·수정·삭제 ─────────────────────────────────────────────
 
-export async function addRoutine(title: string, weekdays: string, startDate: string): Promise<number> {
+export async function addRoutine(title: string, weekdays: string, startDate: string, important = false): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync(
-    "INSERT INTO routines (title, weekdays, important, start_date, created_at) VALUES (?, ?, 0, ?, ?)",
-    [title.trim(), weekdays, startDate, new Date().toISOString()],
+    "INSERT INTO routines (title, weekdays, important, start_date, created_at) VALUES (?, ?, ?, ?, ?)",
+    [title.trim(), weekdays, important ? 1 : 0, startDate, new Date().toISOString()],
   );
   return result.lastInsertRowId;
 }

@@ -27,6 +27,7 @@ export interface FortuneFetchParams {
   birthMonthType: "solar" | "lunar"; // 양력/음력
   birthDay: number;
   birthHour?: number; // 모르면 undefined
+  birthMinute?: number; // 0~59, 모르면 undefined (시를 보낸 경우에만 의미 있음)
 }
 
 // ── API 호출 ─────────────────────────────────────────────────
@@ -38,6 +39,7 @@ export async function fetchFortune(params: FortuneFetchParams): Promise<FortuneD
     birth_month_type: params.birthMonthType,
     birth_day: String(params.birthDay),
     ...(params.birthHour !== undefined ? { birth_hour: String(params.birthHour) } : {}),
+    ...(params.birthHour !== undefined && params.birthMinute !== undefined ? { birth_minute: String(params.birthMinute) } : {}),
   });
 
   const url = `${API_BASE}/api/fortune?${query.toString()}`;

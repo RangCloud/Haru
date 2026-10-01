@@ -9,6 +9,7 @@
  * - 선택한 날 = 칸 테두리 + 날짜 옆 작은 점, 오늘 = 굵은 인디고 숫자.
  *   (칸을 색으로 채우지 않아 일정 색·금액 색이 선택된 날에도 그대로 보인다)
  * - 수입·지출은 칸 아래 금액(−2.2만, +320만).
+ * - 공휴일은 날짜를 빨간색으로, 옆에 공휴일 이름을 작게 쓴다 (예: 3 개천절).
  * - 앞뒤 달 날짜는 흐리게 채우고, 누르면 그 날짜로 이동한다.
  *
  * 한 주씩 줄로 그린다 — 칸 너비를 '100/7 %' + 줄바꿈으로 두면 기기에 따라 날짜가 한 칸씩 밀렸다.
@@ -41,6 +42,7 @@ interface MonthCalendarProps {
   selectedDate: string;
   today: string;               // 화면이 관리하는 '오늘' — 자정이 지나면 부모가 갱신한다
   marks: Record<string, DayMark>;
+  holidays: Record<string, string>;        // { '2026-10-03': '개천절' } — 비어 있으면 공휴일 표시 없음
   onSelectDate: (date: string) => void;   // 앞뒤 달 날짜를 누르면 그 날짜가 넘어온다
   onSwipeMonth: (delta: -1 | 1) => void;
   colors: typeof Colors.light;
@@ -49,7 +51,7 @@ interface MonthCalendarProps {
 const SWIPE_DISTANCE = 50;   // 이만큼 밀어야 달이 넘어간다
 const MAX_ROWS = 3;          // 칸 안 일정 줄 수 (금액이 두 줄이면 한 줄 줄인다)
 
-export function MonthCalendar({ year, month, selectedDate, today, marks, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
+export function MonthCalendar({ year, month, selectedDate, today, marks, holidays, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
   const weeks = buildCalendarGrid(year, month);
 
   // PanResponder는 한 번만 만들고, 최신 콜백은 ref로 읽는다 (재생성 시 제스처가 끊기는 것 방지)
@@ -91,7 +93,9 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, onSelec
             const shown = events.length <= rows ? events : events.slice(0, rows - 1);
             const hidden = events.length - shown.length;
 
-            const numColor = isToday ? colors.tint : dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
+            const holiday = cell.inMonth ? holidays[cell.date] : undefined;
+            // 오늘 표시가 가장 우선, 그다음 공휴일·일요일은 빨강, 토요일은 파랑
+            const numColor = isToday ? colors.tint : holiday || dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
 
             return (
               <TouchableOpacity
@@ -99,12 +103,17 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, onSelec
                 style={[styles.cell, isSelected && [styles.selectedCell, { borderColor: colors.tint }], !cell.inMonth && styles.outCell]}
                 onPress={() => onSelectDate(cell.date)}
                 activeOpacity={0.6}
-                accessibilityLabel={`${cell.day}일${isToday ? ", 오늘" : ""}${events.length ? `, 일정 ${events.length}개` : ""}`}
+                accessibilityLabel={`${cell.day}일${holiday ? `, ${holiday}` : ""}${isToday ? ", 오늘" : ""}${events.length ? `, 일정 ${events.length}개` : ""}`}
                 accessibilityState={{ selected: isSelected }}
               >
                 <View style={styles.numRow}>
                   <Text style={[styles.num, { color: numColor }, isToday && styles.numBold]}>{cell.day}</Text>
                   {isSelected && <View style={[styles.selectedDot, { backgroundColor: colors.tint }]} />}
+                  {holiday && (
+                    <Text style={[styles.holidayName, { color: colors.expense }]} numberOfLines={1} ellipsizeMode="tail">
+                      {holiday}
+                    </Text>
+                  )}
                 </View>
 
                 {shown.map((ev) => {
@@ -176,7 +185,9 @@ const styles = StyleSheet.create({
   // 선택한 날: 칸 테두리만 (테두리 두께만큼 안쪽 여백이 줄어 내용이 흔들리지 않도록 여백을 같이 줄인다)
   selectedCell: { borderWidth: 1.5, paddingTop: 2.5, paddingBottom: 1.5, paddingHorizontal: 0.5 },
   outCell: { opacity: 0.32 },
-  numRow: { flexDirection: "row", alignItems: "center", gap: 3, paddingLeft: 4, height: 18 },
+  numRow: { flexDirection: "row", alignItems: "center", gap: 3, paddingLeft: 4, paddingRight: 2, height: 18 },
+  // 공휴일 이름은 남는 폭 안에서만 — 길면 '…'
+  holidayName: { flexShrink: 1, fontSize: 8.5, fontWeight: "600" },
   num: { fontSize: 12.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
   numBold: { fontWeight: "800" },
   selectedDot: { width: 5, height: 5, borderRadius: 2.5 },

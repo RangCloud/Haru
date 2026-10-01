@@ -1,76 +1,97 @@
 /**
- * 할 일·루틴 추가 시트 (피드백 2번·18번)
+ * 할 일·루틴 추가·수정 시트
  *
- * - 할 일: 날짜를 골라 추가한다 (기본값은 호출한 화면이 넘겨준 날짜 — 홈은 오늘, 달력은 선택한 날).
- *   오늘이 아닌 날짜의 할 일은 일정 탭 달력에서 그 날짜를 누르면 보이고, 그날이 되면 홈에도 나타난다.
- * - 루틴: 반복할 요일을 골라 추가한다. 해당 요일마다 할 일 목록에 자동으로 나타난다.
- * - 루틴 요일 수정: editRoutine을 넘기면 요일만 바꾸는 편집 모드로 열린다.
+ * 한 창에서 모두 정한다.
+ * - 내용
+ * - 종류: 할 일(날짜 지정) / 고정 루틴(반복 요일)
+ * - ★ 중요 표시 — 켜면 목록 맨 위에 별과 함께 표시
+ *
+ * editTarget을 넘기면 수정 모드로 열린다. 이때 종류는 바꿀 수 없다
+ * (할 일 ↔ 루틴은 저장 구조가 달라서, 바꾸려면 지우고 새로 추가한다).
+ * 오늘이 아닌 날짜의 할 일은 그날이 되면 홈에 나타난다.
  */
 
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateField } from "@/src/components/DateTimeFields";
-import { WEEKDAY_LABELS } from "@/src/db/routine";
+import { WEEKDAY_LABELS, type RoutineForDate } from "@/src/db/routine";
+import { type TodoItem } from "@/src/db/todo";
 import { useTodoStore } from "@/src/store/todoStore";
 import { formatMonthDay, todayString } from "@/src/utils/date";
 
 type Mode = "todo" | "routine";
 
+export type TodoEditTarget =
+  | { kind: "todo"; item: TodoItem }
+  | { kind: "routine"; item: RoutineForDate };
+
 interface TodoAddSheetProps {
   visible: boolean;
   onClose: () => void;
-  initialDate?: string;
-  initialMode?: Mode;
-  /** 루틴 요일 수정 모드 */
-  editRoutine?: { id: number; title: string; weekdays: string };
+  editTarget?: TodoEditTarget;
   colors: typeof Colors.light;
 }
 
-export function TodoAddSheet({ visible, onClose, initialDate, initialMode = "todo", editRoutine, colors }: TodoAddSheetProps) {
-  const { add, addRoutine, updateRoutineDays } = useTodoStore();
-  const [mode, setMode] = useState<Mode>(initialMode);
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState(initialDate ?? todayString());
-  const [weekdays, setWeekdays] = useState("1111111");
+const STAR_COLOR = "#F5B400";
 
-  // 열 때마다 초기화 — 이전에 입력하다 닫은 내용이 남지 않게
+export function TodoAddSheet({ visible, onClose, editTarget, colors }: TodoAddSheetProps) {
+  const { add, addRoutine, updateTodo, updateRoutineFields } = useTodoStore();
+  const [mode, setMode] = useState<Mode>("todo");
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState(todayString());
+  const [weekdays, setWeekdays] = useState("1111111");
+  const [important, setImportant] = useState(false);
+
+  // 열 때마다 초기화 — 수정이면 기존 값으로, 추가면 빈 값으로
   useEffect(() => {
     if (!visible) return;
-    if (editRoutine) {
+    if (editTarget?.kind === "todo") {
+      setMode("todo");
+      setTitle(editTarget.item.title);
+      setDate(editTarget.item.date);
+      setImportant(editTarget.item.important);
+    } else if (editTarget?.kind === "routine") {
       setMode("routine");
-      setTitle(editRoutine.title);
-      setWeekdays(editRoutine.weekdays);
+      setTitle(editTarget.item.title);
+      setWeekdays(editTarget.item.weekdays);
+      setImportant(editTarget.item.important);
     } else {
-      setMode(initialMode);
+      setMode("todo");
       setTitle("");
+      setDate(todayString());
       setWeekdays("1111111");
+      setImportant(false);
     }
-    setDate(initialDate ?? todayString());
-  }, [visible, initialDate, initialMode, editRoutine]);
+  }, [visible, editTarget]);
 
+  const isEdit = !!editTarget;
   const toggleDay = (i: number) =>
     setWeekdays((w) => w.split("").map((c, idx) => (idx === i ? (c === "1" ? "0" : "1") : c)).join(""));
 
-  const canSubmit = editRoutine ? weekdays.includes("1") : title.trim().length > 0 && (mode === "todo" || weekdays.includes("1"));
+  const canSubmit = title.trim().length > 0 && (mode === "todo" || weekdays.includes("1"));
 
   const submit = async () => {
     if (!canSubmit) return;
-    if (editRoutine) await updateRoutineDays(editRoutine.id, weekdays);
-    else if (mode === "todo") await add(title, date);
-    else await addRoutine(title, weekdays);
+    if (editTarget?.kind === "todo") await updateTodo(editTarget.item.id, { title, date, important });
+    else if (editTarget?.kind === "routine") await updateRoutineFields(editTarget.item.id, { title, weekdays, important });
+    else if (mode === "todo") await add(title, date, important);
+    else await addRoutine(title, weekdays, important);
     onClose();
   };
 
-  const isEdit = !!editRoutine;
+  const sheetTitle = isEdit
+    ? mode === "todo" ? "할 일 수정" : "루틴 수정"
+    : "할 일 추가";
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title={isEdit ? "루틴 요일 변경" : mode === "todo" ? "할 일 추가" : "루틴 추가"}
+      title={sheetTitle}
       colors={colors}
       footer={
         <TouchableOpacity
@@ -82,7 +103,7 @@ export function TodoAddSheet({ visible, onClose, initialDate, initialMode = "tod
         </TouchableOpacity>
       }
     >
-      {/* 할 일 / 루틴 전환 (편집 모드에서는 숨김) */}
+      {/* 종류 — 추가할 때만 고를 수 있다 */}
       {!isEdit && (
         <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           {(["todo", "routine"] as const).map((m) => (
@@ -90,6 +111,7 @@ export function TodoAddSheet({ visible, onClose, initialDate, initialMode = "tod
               key={m}
               style={[styles.segmentBtn, mode === m && { backgroundColor: colors.tint }]}
               onPress={() => setMode(m)}
+              accessibilityState={{ selected: mode === m }}
             >
               <Text style={[styles.segmentText, { color: mode === m ? "#fff" : colors.subtext }]}>
                 {m === "todo" ? "할 일" : "↻ 고정 루틴"}
@@ -99,30 +121,23 @@ export function TodoAddSheet({ visible, onClose, initialDate, initialMode = "tod
         </View>
       )}
 
-      {isEdit ? (
-        <Text style={[styles.editTitle, { color: colors.text }]}>{title}</Text>
-      ) : (
-        <>
-          <Text style={[styles.label, { color: colors.subtext }]}>내용</Text>
-          <TextInput
-            style={[styles.input, { color: colors.text, borderColor: colors.separator, backgroundColor: colors.card }]}
-            placeholder={mode === "todo" ? "예) 은행 들르기" : "예) 스트레칭 10분"}
-            placeholderTextColor={colors.subtext}
-            value={title}
-            onChangeText={setTitle}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={submit}
-          />
-        </>
-      )}
+      <Text style={[styles.label, { color: colors.subtext }]}>내용</Text>
+      <TextInput
+        style={[styles.input, { color: colors.text, borderColor: colors.separator, backgroundColor: colors.card }]}
+        placeholder={mode === "todo" ? "예) 은행 들르기" : "예) 스트레칭 10분"}
+        placeholderTextColor={colors.subtext}
+        value={title}
+        onChangeText={setTitle}
+        autoFocus={!isEdit}
+        returnKeyType="done"
+      />
 
-      {mode === "todo" && !isEdit ? (
+      {mode === "todo" ? (
         <>
           <DateField label="날짜" value={date} onChange={setDate} colors={colors} />
           {date !== todayString() && (
             <Text style={[styles.hint, { color: colors.subtext }]}>
-              {formatMonthDay(date)} 할 일은 일정 탭 달력에서 그 날짜를 누르면 볼 수 있어요.
+              {formatMonthDay(date)} — 그날이 되면 홈의 오늘 할 일에 나타나요.
             </Text>
           )}
         </>
@@ -156,6 +171,23 @@ export function TodoAddSheet({ visible, onClose, initialDate, initialMode = "tod
           )}
         </>
       )}
+
+      {/* 중요 표시 */}
+      <TouchableOpacity
+        style={[styles.importantRow, { borderColor: important ? STAR_COLOR : colors.separator, backgroundColor: colors.card }]}
+        onPress={() => setImportant((v) => !v)}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: important }}
+      >
+        <IconSymbol name="star.fill" size={18} color={important ? STAR_COLOR : colors.separator} />
+        <View style={styles.importantText}>
+          <Text style={[styles.importantTitle, { color: colors.text }]}>중요 표시</Text>
+          <Text style={[styles.importantSub, { color: colors.subtext }]}>목록 맨 위에 별과 함께 보여줘요</Text>
+        </View>
+        <View style={[styles.toggle, { backgroundColor: important ? colors.tint : colors.separator }]}>
+          <View style={[styles.knob, important && styles.knobOn]} />
+        </View>
+      </TouchableOpacity>
     </BottomSheet>
   );
 }
@@ -166,13 +198,19 @@ const styles = StyleSheet.create({
   segmentText: { fontSize: 14, fontWeight: "600" },
   label: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-  editTitle: { fontSize: 16, fontWeight: "600", marginVertical: 4 },
   hint: { fontSize: 12, lineHeight: 17 },
   days: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
   day: { flex: 1, aspectRatio: 1, maxWidth: 44, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   dayText: { fontSize: 14, fontWeight: "600" },
   presets: { flexDirection: "row", gap: 16, marginTop: 2 },
   preset: { fontSize: 13, fontWeight: "600" },
+  importantRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
+  importantText: { flex: 1, gap: 1 },
+  importantTitle: { fontSize: 14, fontWeight: "600" },
+  importantSub: { fontSize: 11 },
+  toggle: { width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: "center" },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" },
+  knobOn: { alignSelf: "flex-end" },
   submit: { paddingVertical: 16, borderRadius: 14, alignItems: "center" },
   submitText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 });

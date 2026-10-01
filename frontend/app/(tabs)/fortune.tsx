@@ -40,10 +40,16 @@ function BirthInfoForm({
   const [day, setDay] = useState("");
   // 시간 선택: "0"~"23" 또는 "unknown"(모름)
   const [hourStr, setHourStr] = useState<string>("unknown");
+  // 분 선택: "0"~"59" 또는 "unknown"(모름) — 시를 고른 경우에만 보여준다
+  const [minuteStr, setMinuteStr] = useState<string>("unknown");
 
   const HOUR_OPTIONS = [
     "모름",
     ...Array.from({ length: 24 }, (_, i) => `${i}시`),
+  ];
+  const MINUTE_OPTIONS = [
+    "모름",
+    ...Array.from({ length: 60 }, (_, i) => `${String(i).padStart(2, "0")}분`),
   ];
 
   const handleSave = () => {
@@ -65,8 +71,9 @@ function BirthInfoForm({
     }
 
     const hour = hourStr === "unknown" ? null : parseInt(hourStr, 10);
+    const minute = hour === null || minuteStr === "unknown" ? null : parseInt(minuteStr, 10);
 
-    onSave({ year: y, month: m, monthType, day: d, hour });
+    onSave({ year: y, month: m, monthType, day: d, hour, minute });
   };
 
   return (
@@ -165,7 +172,7 @@ function BirthInfoForm({
                   { borderColor: colors.cardBorder, backgroundColor: colors.card },
                   selected && { backgroundColor: colors.tint, borderColor: colors.tint },
                 ]}
-                onPress={() => setHourStr(val)}
+                onPress={() => { setHourStr(val); if (val === "unknown") setMinuteStr("unknown"); }}
               >
                 <Text style={[styles.hourChipText, { color: selected ? "#fff" : colors.subtext }]}>
                   {opt}
@@ -175,6 +182,32 @@ function BirthInfoForm({
           })}
         </ScrollView>
       </View>
+
+      {/* 태어난 분 — 시를 고른 경우에만 */}
+      {hourStr !== "unknown" && (
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>태어난 분 (선택)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hourScroll}>
+            {MINUTE_OPTIONS.map((opt, idx) => {
+              const val = idx === 0 ? "unknown" : String(idx - 1);
+              const selected = minuteStr === val;
+              return (
+                <TouchableOpacity
+                  key={opt}
+                  style={[
+                    styles.hourChip,
+                    { borderColor: colors.cardBorder, backgroundColor: colors.card },
+                    selected && { backgroundColor: colors.tint, borderColor: colors.tint },
+                  ]}
+                  onPress={() => setMinuteStr(val)}
+                >
+                  <Text style={[styles.hourChipText, { color: selected ? "#fff" : colors.subtext }]}>{opt}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       <TouchableOpacity
         style={[styles.saveBtn, { backgroundColor: colors.tint }]}
@@ -203,7 +236,11 @@ function FortuneCard({
 }) {
   const insets = useSafeAreaInsets();
   const monthTypeLabel = birthInfo.monthType === "solar" ? "양력" : "음력";
-  const hourLabel = birthInfo.hour !== null ? `${birthInfo.hour}시생` : "";
+  const hourLabel = birthInfo.hour === null
+    ? ""
+    : birthInfo.minute != null
+      ? `${birthInfo.hour}시 ${String(birthInfo.minute).padStart(2, "0")}분생`
+      : `${birthInfo.hour}시생`;
   const birthLabel = `${birthInfo.year}년 ${birthInfo.month}월(${monthTypeLabel}) ${birthInfo.day}일${hourLabel ? " " + hourLabel : ""}`;
 
   return (

@@ -28,17 +28,14 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
-import { DateField, ScheduleWhenField, type ScheduleWhen } from "@/src/components/DateTimeFields";
+import { BudgetModal, formatAmount, TransactionRow } from "@/src/components/BudgetModal";
+import { ScheduleWhenField, type ScheduleWhen } from "@/src/components/DateTimeFields";
 import { MonthCalendar, type CellEvent, type DayMark } from "@/src/components/MonthCalendar";
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  type NewTransaction,
-  type Transaction,
-} from "@/src/db/budget";
+import { type Transaction } from "@/src/db/budget";
 import { type ColorLabels } from "@/src/db/colorLabel";
 import { type NewScheduleItem, type ScheduleItem } from "@/src/db/schedule";
 import { useBudgetStore } from "@/src/store/budgetStore";
+import { useHolidayStore } from "@/src/store/holidayStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
 import { formatMonthDay, parseDate, shiftMonth, toDateStr, todayString } from "@/src/utils/date";
 import { scheduleEventNotification } from "@/src/utils/notifications";
@@ -60,10 +57,6 @@ const SCHEDULE_COLORS = [
 ];
 
 // ── 유틸 ─────────────────────────────────────────────────────
-
-function formatAmount(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
-}
 
 /** '#RRGGBB' + 투명도 → 연한 배경색 (라벨 칩용) */
 function withAlpha(hex: string, alpha: string): string {
@@ -227,45 +220,6 @@ function ScheduleRow({ item, date, label, colors, onDelete, onEdit }: {
   );
 }
 
-// ── 거래 행 (피드백 6번: 수입·지출 태그 색 구분) ─────────────────
-
-function TransactionRow({ item, colors, onDelete, onEdit }: {
-  item: Transaction;
-  colors: ThemeColors;
-  onDelete: () => void;
-  onEdit: () => void;
-}) {
-  const isIncome = item.type === "income";
-  const tone = isIncome ? colors.income : colors.expense;
-  return (
-    <TouchableOpacity
-      style={[styles.txRow, { borderBottomColor: colors.separator }]}
-      onLongPress={() =>
-        Alert.alert(
-          "거래 관리",
-          `${item.category}  ${isIncome ? "+" : "-"}${formatAmount(item.amount)}`,
-          [
-            { text: "수정", onPress: onEdit },
-            { text: "삭제", style: "destructive", onPress: onDelete },
-            { text: "취소", style: "cancel" },
-          ],
-        )
-      }
-      activeOpacity={0.7}
-    >
-      <View style={[styles.txBadge, { backgroundColor: withAlpha(tone, "1F") }]}>
-        <Text style={[styles.txBadgeText, { color: tone }]}>{isIncome ? "수입" : "지출"} · {item.category}</Text>
-      </View>
-      <Text style={[styles.txNote, { color: colors.text }]} numberOfLines={1}>
-        {item.note || item.category}
-      </Text>
-      <Text style={[styles.txAmount, { color: tone }]}>
-        {isIncome ? "+" : "-"}{formatAmount(item.amount)}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 // ── 일정 추가·수정 시트 (피드백 8·12·14번) ──────────────────────
 
 interface ScheduleModalProps {
@@ -352,119 +306,6 @@ function ScheduleModal({ visible, initialDate, onClose, onSubmit, colors, initia
 
       <Text style={[styles.fieldLabel, { color: colors.subtext }]}>색상</Text>
       <ColorPicker value={color} onChange={setColor} labels={labels} onSaveLabel={onSaveLabel} colors={colors} />
-    </BottomSheet>
-  );
-}
-
-// ── 거래 추가·수정 시트 ───────────────────────────────────────
-
-interface BudgetModalProps {
-  visible: boolean;
-  initialDate: string;
-  initialType?: "income" | "expense";
-  onClose: () => void;
-  onSubmit: (t: NewTransaction) => void;
-  colors: ThemeColors;
-  initialData?: Transaction;
-}
-
-function BudgetModal({ visible, initialDate, initialType = "expense", onClose, onSubmit, colors, initialData }: BudgetModalProps) {
-  const [type, setType] = useState<"income" | "expense">(initialData?.type ?? initialType);
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(initialDate);
-  const isEdit = !!initialData;
-
-  useEffect(() => {
-    if (!visible) return;
-    if (initialData) {
-      setType(initialData.type);
-      setAmount(initialData.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","));
-      setCategory(initialData.category); setNote(initialData.note); setDate(initialData.date);
-    } else {
-      setType(initialType); setAmount("");
-      setCategory(initialType === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
-      setNote(""); setDate(initialDate);
-    }
-  }, [visible, initialDate, initialType, initialData]);
-
-  const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-  const tone = type === "expense" ? colors.expense : colors.income;
-
-  const switchType = (t: "income" | "expense") => {
-    setType(t);
-    setCategory(t === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
-  };
-
-  const handleAmountChange = (text: string) => {
-    const raw = text.replace(/[^0-9]/g, "");
-    if (!raw) { setAmount(""); return; }
-    setAmount(parseInt(raw, 10).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","));
-  };
-
-  const handleSubmit = () => {
-    const num = parseInt(amount.replace(/,/g, ""), 10);
-    if (!num || num <= 0) { Alert.alert("입력 오류", "금액을 올바르게 입력해 주세요."); return; }
-    onSubmit({ type, amount: num, category, note: note.trim(), date });
-  };
-
-  return (
-    <BottomSheet
-      visible={visible}
-      onClose={onClose}
-      title={isEdit ? "거래 수정" : "거래 추가"}
-      colors={colors}
-      footer={
-        <TouchableOpacity style={[styles.submitBtn, { backgroundColor: tone }]} onPress={handleSubmit}>
-          <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
-        </TouchableOpacity>
-      }
-    >
-      {/* 수입/지출 토글 */}
-      <View style={[styles.typeToggle, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-        {(["expense", "income"] as const).map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.typeBtn, type === t && { backgroundColor: t === "expense" ? colors.expense : colors.income }]}
-            onPress={() => switchType(t)}
-          >
-            <Text style={[styles.typeBtnText, { color: type === t ? "#fff" : colors.subtext }]}>
-              {t === "expense" ? "지출" : "수입"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>금액</Text>
-      <TextInput
-        style={[styles.input, { color: colors.text, backgroundColor: colors.card, borderColor: colors.separator }]}
-        placeholder="금액 입력 (원)" placeholderTextColor={colors.subtext}
-        keyboardType="number-pad" value={amount} onChangeText={handleAmountChange} autoFocus={!isEdit}
-      />
-
-      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>카테고리</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryList}>
-        {categories.map((c) => (
-          <TouchableOpacity
-            key={c}
-            style={[styles.categoryChip, { borderColor: colors.separator, backgroundColor: colors.card },
-              category === c && { backgroundColor: tone, borderColor: tone }]}
-            onPress={() => setCategory(c)}
-          >
-            <Text style={[styles.categoryText, { color: category === c ? "#fff" : colors.subtext }]}>{c}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <DateField label="날짜" value={date} onChange={setDate} colors={colors} />
-
-      <Text style={[styles.fieldLabel, { color: colors.subtext }]}>메모 (선택)</Text>
-      <TextInput
-        style={[styles.input, { color: colors.text, backgroundColor: colors.card, borderColor: colors.separator }]}
-        placeholder="메모" placeholderTextColor={colors.subtext}
-        value={note} onChangeText={setNote}
-      />
     </BottomSheet>
   );
 }
@@ -566,6 +407,9 @@ export default function ScheduleScreen() {
   const [editTransaction, setEditTransaction] = useState<Transaction | undefined>();
   const [detailVisible, setDetailVisible] = useState(false);
   const [jumpVisible, setJumpVisible] = useState(false);
+  // 공휴일 — 보고 있는 연도를 받아 둔다 (받지 못하면 공휴일 없이 표시)
+  const { names: holidays, loadYear: loadHolidays } = useHolidayStore();
+  useEffect(() => { loadHolidays(year); }, [year, loadHolidays]);
   // 달력의 '오늘' 기준 — 앱을 켜 둔 채 자정이 지나도 다시 그려지도록 상태로 둔다 (수정 2번)
   const [today, setToday] = useState(todayString());
   const todayRef = useRef(today);
@@ -682,7 +526,7 @@ export default function ScheduleScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <MonthCalendar
-          year={year} month={month} selectedDate={selectedDate} marks={marks} today={today}
+          year={year} month={month} selectedDate={selectedDate} marks={marks} today={today} holidays={holidays}
           onSelectDate={handleSelectDate} onSwipeMonth={changeMonth} colors={colors}
         />
 
@@ -692,7 +536,7 @@ export default function ScheduleScreen() {
         <View style={[styles.selectedDateSticky, { borderTopColor: colors.separator, backgroundColor: colors.background }]}>
           <View style={styles.selectedDateBar}>
             <Text style={[styles.selectedDateText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-              {formatMonthDay(selectedDate)}{isToday ? " · 오늘" : ""}
+              {formatMonthDay(selectedDate)}{holidays[selectedDate] ? ` · ${holidays[selectedDate]}` : ""}{isToday ? " · 오늘" : ""}
             </Text>
             <View style={styles.barActions}>
               <TouchableOpacity
@@ -878,11 +722,6 @@ const styles = StyleSheet.create({
   scheduleTitle: { flexShrink: 1, fontSize: 15, fontWeight: "500" },
   scheduleNote: { fontSize: 12 },
   scheduleTime: { fontSize: 13, fontWeight: "500", fontVariant: ["tabular-nums"] },
-  txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
-  txBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  txBadgeText: { fontSize: 11, fontWeight: "600" },
-  txNote: { flex: 1, fontSize: 14 },
-  txAmount: { fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
   empty: { justifyContent: "center", alignItems: "center", paddingVertical: 32, gap: 6 },
   emptyText: { fontSize: 15 },
   emptyHint: { fontSize: 13 },
@@ -892,12 +731,6 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
   submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: "center" },
   submitBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  typeToggle: { flexDirection: "row", borderRadius: 10, borderWidth: 1, overflow: "hidden", marginBottom: 4 },
-  typeBtn: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  typeBtnText: { fontSize: 15, fontWeight: "600" },
-  categoryList: { gap: 8, paddingVertical: 4 },
-  categoryChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  categoryText: { fontSize: 13 },
   // ── 한눈에 보기 ───────────────────────────────────────────
   detailCard: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
   detailHeader: { flexDirection: "row", justifyContent: "space-between" },

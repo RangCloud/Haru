@@ -12,7 +12,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -22,9 +21,8 @@ import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
-import { TodoAddSheet } from "@/src/components/TodoAddSheet";
+import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
-import { type RoutineForDate } from "@/src/db/routine";
 import { type ScheduleItem } from "@/src/db/schedule";
 import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
@@ -34,7 +32,7 @@ import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
 import { requestNotificationPermission } from "@/src/utils/notifications";
-import { timeLabelOn } from "@/src/utils/scheduleText";
+import { isPastOn, timeLabelOn } from "@/src/utils/scheduleText";
 import { writeWidgetData } from "@/src/utils/widgetData";
 
 // ── 유틸 ─────────────────────────────────────────────────────
@@ -250,13 +248,8 @@ function BudgetSummaryCard({
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
 
-  // '자세히' → 일정 탭 달력도 같은 달로 옮겨서 그 달 내역을 바로 보게 한다
-  const openDetail = async () => {
-    const date = isCurrent ? todayString() : `${year}-${String(month).padStart(2, "0")}-01`;
-    router.push("/(tabs)/schedule");
-    await useScheduleStore.getState().goToDate(date);
-    await useBudgetStore.getState().loadMonth(year, month);
-  };
+  // '자세히' → 가계부 탭. 가계부 탭은 홈 카드와 같은 달을 보므로 지금 고른 달의 내역이 바로 나온다
+  const openDetail = () => router.push("/(tabs)/budget");
 
   return (
     <TouchableOpacity
@@ -311,6 +304,20 @@ function BudgetSummaryCard({
 
 // ── 오늘 일정 카드 ────────────────────────────────────────────
 
+/** 현재 시각 'HH:MM' — 30초마다 갱신해 일정이 끝나는 순간 화면에 반영되게 한다 */
+function useNowHHMM(): string {
+  const read = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const [now, setNow] = useState(read);
+  useEffect(() => {
+    const id = setInterval(() => setNow(read()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 function TodayScheduleCard({
   schedules, today, colors,
 }: {
@@ -319,6 +326,7 @@ function TodayScheduleCard({
   colors: typeof Colors.light;
 }) {
   const preview = schedules.slice(0, 3);
+  const now = useNowHHMM();
 
   return (
     <TouchableOpacity
@@ -334,17 +342,24 @@ function TodayScheduleCard({
         <Text style={[styles.emptyText, { color: colors.subtext }]}>오늘 일정이 없습니다.</Text>
       ) : (
         <>
-          {preview.map((s) => (
+          {preview.map((s) => {
+            // 끝난 일정은 완료한 할 일과 똑같이 가운데 줄 + 흐린 글씨
+            const past = isPastOn(s, today, now);
+            return (
             <View key={s.id} style={styles.scheduleItem}>
-              <View style={[styles.scheduleDot, { backgroundColor: s.color || colors.tint }]} />
-              <Text style={[styles.scheduleTitle, { color: colors.text }]} numberOfLines={1}>
+              <View style={[styles.scheduleDot, { backgroundColor: s.color || colors.tint }, past && styles.pastDot]} />
+              <Text
+                style={[styles.scheduleTitle, { color: past ? colors.subtext : colors.text }, past && styles.pastTitle]}
+                numberOfLines={1}
+              >
                 {s.title}
               </Text>
               <Text style={[styles.scheduleTime, { color: colors.subtext }]}>
                 {timeLabelOn(s, today)}
               </Text>
             </View>
-          ))}
+            );
+          })}
           {schedules.length > 3 && (
             <Text style={[styles.moreText, { color: colors.tint }]}>
               +{schedules.length - 3}개 더 보기
@@ -359,93 +374,51 @@ function TodayScheduleCard({
 // ── 투두리스트 카드 ───────────────────────────────────────────
 
 function TodoCard({ colors }: { colors: typeof Colors.light }) {
-  const { todos, routines, add, isLoaded } = useTodoStore();
-  const [input, setInput] = useState("");
-  const inputRef = useRef<TextInput>(null);
-  // 날짜 지정·루틴 추가 시트 (피드백 2번·18번)
-  const [sheet, setSheet] = useState<{ mode: "todo" | "routine"; editRoutine?: { id: number; title: string; weekdays: string } } | null>(null);
+  const { todos, routines, isLoaded } = useTodoStore();
+  // 추가·수정 시트 — open: 열림 여부, target: 수정할 항목 (없으면 새로 추가)
+  const [sheet, setSheet] = useState<{ open: boolean; target?: TodoEditTarget }>({ open: false });
 
   const all = [...routines, ...todos];
   const doneCount = all.filter((t) => t.done).length;
 
-  // 입력칸에 바로 쓰고 엔터 → 오늘 할 일로 빠르게 추가 (기존 사용 방식 유지)
-  const handleAdd = async () => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-    try {
-      await add(trimmed);
-      setInput("");
-    } catch {
-      Alert.alert("오류", "할 일 추가에 실패했습니다. 다시 시도해 주세요.");
-    }
-  };
-
-  const handleEditRoutine = (r: RoutineForDate) =>
-    setSheet({ mode: "routine", editRoutine: { id: r.id, title: r.title, weekdays: r.weekdays } });
-
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
       <View style={styles.cardHeader}>
-        <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 할 일</Text>
-        {all.length > 0 && (
-          <Text style={[styles.todoBadge, { color: colors.subtext }]}>
-            {doneCount}/{all.length}
-          </Text>
-        )}
+        <View style={styles.todoHeaderLeft}>
+          <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 할 일</Text>
+          {all.length > 0 && (
+            <Text style={[styles.todoBadge, { color: colors.subtext }]}>
+              {doneCount}/{all.length}
+            </Text>
+          )}
+        </View>
+        {/* 할 일·루틴·날짜 지정·중요 표시는 모두 추가 창에서 */}
+        <TouchableOpacity
+          onPress={() => setSheet({ open: true })}
+          style={[styles.todoAddBtn, { backgroundColor: colors.tint }]}
+          accessibilityLabel="할 일 추가"
+        >
+          <Text style={styles.todoAddText}>+ 추가</Text>
+        </TouchableOpacity>
       </View>
 
       {isLoaded && all.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.subtext }]}>할 일을 추가해보세요.</Text>
+        <Text style={[styles.emptyText, { color: colors.subtext }]}>+ 추가로 할 일이나 루틴을 넣어 보세요.</Text>
       ) : (
-        <TodoList todos={todos} routines={routines} date={todayString()} colors={colors} onEditRoutine={handleEditRoutine} />
+        <TodoList
+          todos={todos} routines={routines} date={todayString()} colors={colors}
+          onEdit={(target) => setSheet({ open: true, target })}
+        />
       )}
 
       {all.length > 0 && (
-        <Text style={[styles.todoHint, { color: colors.subtext }]}>길게 눌러 ★ 중요 표시·삭제</Text>
+        <Text style={[styles.todoHint, { color: colors.subtext }]}>길게 눌러 수정·★ 중요 표시·삭제</Text>
       )}
 
-      {/* 입력창 + 날짜 지정·루틴 버튼 */}
-      <View style={[styles.todoInputRow, { borderTopColor: colors.separator }]}>
-        <TextInput
-          ref={inputRef}
-          style={[styles.todoInput, { color: colors.text }]}
-          placeholder="+ 오늘 할 일 추가"
-          placeholderTextColor={colors.subtext}
-          value={input}
-          onChangeText={setInput}
-          onSubmitEditing={handleAdd}
-          returnKeyType="done"
-          blurOnSubmit={false}
-        />
-        {input.trim().length > 0 ? (
-          <TouchableOpacity onPress={handleAdd} style={styles.todoAddBtn}>
-            <Text style={[styles.todoAddText, { color: colors.tint }]}>추가</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.todoTools}>
-            <TouchableOpacity
-              onPress={() => setSheet({ mode: "todo" })}
-              style={[styles.todoTool, { backgroundColor: colors.tintLight }]}
-              accessibilityLabel="날짜를 정해서 할 일 추가"
-            >
-              <Text style={[styles.todoToolText, { color: colors.tint }]}>📅 날짜</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setSheet({ mode: "routine" })}
-              style={[styles.todoTool, { backgroundColor: colors.tintLight }]}
-              accessibilityLabel="고정 루틴 추가"
-            >
-              <Text style={[styles.todoToolText, { color: colors.tint }]}>↻ 루틴</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
       <TodoAddSheet
-        visible={sheet !== null}
-        onClose={() => setSheet(null)}
-        initialMode={sheet?.mode}
-        editRoutine={sheet?.editRoutine}
+        visible={sheet.open}
+        onClose={() => setSheet({ open: false })}
+        editTarget={sheet.target}
         colors={colors}
       />
     </View>
@@ -625,24 +598,15 @@ const styles = StyleSheet.create({
   scheduleDot: { width: 7, height: 7, borderRadius: 4 },
   scheduleTitle: { flex: 1, fontSize: 14 },
   scheduleTime: { fontSize: 12 },
+  pastTitle: { textDecorationLine: "line-through" },
+  pastDot: { opacity: 0.4 },
   moreText: { fontSize: 13, fontWeight: "500" },
   // ── 투두 ──────────────────────────────────────────────────
   todoBadge: { fontSize: 12 },
   todoHint: { fontSize: 11, marginTop: -4 },
-  todoTools: { flexDirection: "row", gap: 6 },
-  todoTool: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
-  todoToolText: { fontSize: 12, fontWeight: "600" },
-  todoInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 12,
-    marginTop: 2,
-    gap: 8,
-  },
-  todoInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
-  todoAddBtn: { paddingHorizontal: 4 },
-  todoAddText: { fontSize: 14, fontWeight: "600" },
+  todoHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  todoAddBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
+  todoAddText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 });
 
 // ── 설정 모달 스타일 (바텀 시트) ─────────────────────────────

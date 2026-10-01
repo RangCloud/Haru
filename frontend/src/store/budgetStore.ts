@@ -31,12 +31,13 @@ interface BudgetState {
   totalExpense: number;
   balance: number;
 
-  // 홈 가계부 카드 전용 — 홈에서 ‹ › 로 고른 달의 합계.
+  // 홈 가계부 카드와 가계부 탭이 함께 보는 달 — 홈에서 고른 달이 가계부 탭에도 그대로 나온다.
   // 일정 탭 달력과는 따로 관리해서, 한쪽에서 달을 넘겨도 다른 쪽이 바뀌지 않는다.
   homeYear: number;
   homeMonth: number;
   homeIncome: number;
   homeExpense: number;
+  homeTransactions: Transaction[];   // 그 달의 거래 (가계부 탭 목록용, 최신 날짜순)
 
   // 액션
   loadMonth: (year: number, month: number) => Promise<void>;
@@ -62,10 +63,11 @@ function calcSummary(transactions: Transaction[]) {
 
 const now = new Date();
 
-/** 특정 달의 수입·지출 합계 (홈 카드용) */
+/** 특정 달의 거래와 수입·지출 합계 (홈 카드·가계부 탭용) */
 async function monthSummary(year: number, month: number) {
-  const { totalIncome, totalExpense } = calcSummary(await getTransactionsByMonth(year, month));
-  return { homeIncome: totalIncome, homeExpense: totalExpense };
+  const homeTransactions = await getTransactionsByMonth(year, month);
+  const { totalIncome, totalExpense } = calcSummary(homeTransactions);
+  return { homeTransactions, homeIncome: totalIncome, homeExpense: totalExpense };
 }
 
 export const useBudgetStore = create<BudgetState>((set, get) => {
@@ -91,6 +93,7 @@ export const useBudgetStore = create<BudgetState>((set, get) => {
     homeMonth: now.getMonth() + 1,
     homeIncome: 0,
     homeExpense: 0,
+    homeTransactions: [],
 
     /** 특정 연월 데이터를 DB에서 불러와 상태를 교체한다 (일정 탭 달력용) */
     loadMonth: async (year, month) => {
@@ -98,7 +101,7 @@ export const useBudgetStore = create<BudgetState>((set, get) => {
       set({ transactions, year, month, isLoaded: true, ...calcSummary(transactions) });
     },
 
-    /** 홈 카드에서 볼 달을 바꾸고 그 달 합계를 불러온다 */
+    /** 홈 카드·가계부 탭에서 볼 달을 바꾸고 그 달 거래와 합계를 불러온다 */
     loadHomeMonth: async (year, month) => {
       // 빠르게 ‹ › 를 눌러도 마지막으로 고른 달의 결과만 반영되도록, 응답 시점에 다시 확인한다
       set({ homeYear: year, homeMonth: month });

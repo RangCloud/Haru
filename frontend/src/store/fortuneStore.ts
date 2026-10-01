@@ -21,6 +21,7 @@ export interface BirthInfo {
   monthType: "solar" | "lunar"; // 양력/음력
   day: number;
   hour: number | null;           // null = 시간 모름
+  minute?: number | null;        // null·없음 = 분 모름 (예전에 저장된 생년월일에는 이 값이 없다)
 }
 
 interface FortuneCacheEntry {
@@ -129,6 +130,8 @@ export const useFortuneStore = create<FortuneState>((set, get) => ({
         birthMonthType: birthInfo.monthType,
         birthDay: birthInfo.day,
         birthHour: birthInfo.hour ?? undefined,
+        // 시를 모르면 분은 보내지 않는다
+        birthMinute: birthInfo.hour !== null ? (birthInfo.minute ?? undefined) : undefined,
       });
 
       // 오늘 날짜와 함께 캐시에 저장 — 앱 재시작 후에도 당일 재요청 방지

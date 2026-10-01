@@ -6,13 +6,14 @@
  * 별은 SF Symbols(iOS)의 둥근 star.fill을 써서 "부드러운 별" 모양이 되게 했다.
  * 피드백 18번: 루틴은 제목 아래에 반복 요일(예: 월·수·금)을 작게 표시한다.
  *
- * 조작: 탭 = 완료 체크, 길게 누르기 = 중요 표시·요일 변경·삭제 메뉴.
+ * 조작: 탭 = 완료 체크, 길게 누르기 = 수정·중요 표시·삭제 메뉴.
  */
 
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
+import { type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { describeWeekdays, type RoutineForDate } from "@/src/db/routine";
 import { type TodoItem } from "@/src/db/todo";
 import { useTodoStore } from "@/src/store/todoStore";
@@ -28,10 +29,10 @@ interface TodoListProps {
   routines: RoutineForDate[];
   date: string;                       // 루틴 체크를 기록할 날짜
   colors: typeof Colors.light;
-  onEditRoutine: (r: RoutineForDate) => void;
+  onEdit: (target: TodoEditTarget) => void;   // 수정 창 열기 (할 일·루틴 공통)
 }
 
-export function TodoList({ todos, routines, date, colors, onEditRoutine }: TodoListProps) {
+export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProps) {
   const { toggle, setImportant, remove, toggleRoutine, setRoutineImportant, removeRoutine } = useTodoStore();
 
   // 표시 순서 (수정 7번): ★ 중요(할 일·루틴 모두) → 루틴 → 일반 할 일.
@@ -49,7 +50,9 @@ export function TodoList({ todos, routines, date, colors, onEditRoutine }: TodoL
     const { item } = row;
     const importantLabel = row.important ? "중요 표시 해제" : "★ 중요 표시";
     if (row.kind === "todo") {
+      const todo = row.item;
       Alert.alert(item.title, undefined, [
+        { text: "수정", onPress: () => onEdit({ kind: "todo", item: todo }) },
         { text: importantLabel, onPress: () => setImportant(item.id, !row.important) },
         {
           text: "삭제", style: "destructive",
@@ -60,8 +63,8 @@ export function TodoList({ todos, routines, date, colors, onEditRoutine }: TodoL
     } else {
       const routine = row.item;
       Alert.alert(routine.title, `고정 루틴 · ${describeWeekdays(routine.weekdays)}`, [
+        { text: "수정", onPress: () => onEdit({ kind: "routine", item: routine }) },
         { text: importantLabel, onPress: () => setRoutineImportant(routine.id, !row.important) },
-        { text: "요일 변경", onPress: () => onEditRoutine(routine) },
         {
           text: "루틴 삭제", style: "destructive",
           onPress: () =>

@@ -1,7 +1,7 @@
 /**
  * 앱 설정 스토어 — 시작 화면·뉴스 카테고리
  *
- * 앱을 새로 켰을 때 먼저 보여줄 탭을 사용자가 고른다 (홈·일정·운세·뉴스).
+ * 앱을 새로 켰을 때 먼저 보여줄 탭을 사용자가 고른다 (홈·일정·가계부·운세·뉴스).
  * 뉴스 탭에 보여줄 카테고리와 순서도 사용자가 정한다.
  * 테마 설정(themeStore)과 같은 방식으로 SecureStore에 저장해 재시작 후에도 유지한다.
  * 민감한 값은 아니지만, 이미 쓰고 있는 저장소를 재사용해 새 라이브러리를 들이지 않기 위함이다.
@@ -13,11 +13,12 @@ import { create } from "zustand";
 
 import { NEWS_CATEGORIES, type NewsCategory } from "@/src/api/news";
 
-export type StartTab = "index" | "schedule" | "fortune" | "news";
+export type StartTab = "index" | "schedule" | "budget" | "fortune" | "news";
 
 export const START_TAB_OPTIONS: { value: StartTab; label: string }[] = [
   { value: "index", label: "홈" },
   { value: "schedule", label: "일정" },
+  { value: "budget", label: "가계부" },
   { value: "fortune", label: "운세" },
   { value: "news", label: "뉴스" },
 ];
@@ -38,7 +39,7 @@ interface SettingsState {
 }
 
 const isStartTab = (v: string | null): v is StartTab =>
-  v === "index" || v === "schedule" || v === "fortune" || v === "news";
+  v === "index" || v === "schedule" || v === "budget" || v === "fortune" || v === "news";
 
 /** 저장된 값이 깨졌거나 예전 형식이어도 안전하게 복원 — 알 수 없는 값·중복은 버리고, 비면 기본값 */
 function parseNewsCategories(raw: string | null): NewsCategory[] | null {

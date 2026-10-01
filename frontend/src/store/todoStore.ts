@@ -10,7 +10,7 @@
 
 import { create } from "zustand";
 import {
-  addRoutine,
+  addRoutine as addRoutineRow,
   deleteRoutine,
   getRoutinesForDate,
   setRoutineDone,
@@ -23,6 +23,7 @@ import {
   getTodosByDate,
   setTodoImportant,
   toggleTodo,
+  updateTodo as updateTodoRow,
   type TodoItem,
 } from "@/src/db/todo";
 import { todayString } from "@/src/utils/date";
@@ -40,12 +41,14 @@ interface TodoState {
 
   load: () => Promise<void>;
   loadDate: (date: string) => Promise<void>;
-  add: (title: string, date?: string) => Promise<void>;
+  add: (title: string, date?: string, important?: boolean) => Promise<void>;
+  updateTodo: (id: number, fields: { title?: string; date?: string; important?: boolean }) => Promise<void>;
   toggle: (id: number, done: boolean) => Promise<void>;
   setImportant: (id: number, important: boolean) => Promise<void>;
   remove: (id: number) => Promise<void>;
 
-  addRoutine: (title: string, weekdays: string) => Promise<void>;
+  addRoutine: (title: string, weekdays: string, important?: boolean) => Promise<void>;
+  updateRoutineFields: (id: number, fields: { title?: string; weekdays?: string; important?: boolean }) => Promise<void>;
   toggleRoutine: (id: number, date: string, done: boolean) => Promise<void>;
   setRoutineImportant: (id: number, important: boolean) => Promise<void>;
   updateRoutineDays: (id: number, weekdays: string) => Promise<void>;
@@ -89,9 +92,16 @@ export const useTodoStore = create<TodoState>((set, get) => {
     },
 
     /** 할 일을 추가한다. 날짜를 주지 않으면 오늘 */
-    add: async (title, date) => {
+    add: async (title, date, important) => {
       if (!title.trim()) return;
-      await addTodo({ title, date: date ?? todayString() });
+      await addTodo({ title, date: date ?? todayString(), important });
+      await refresh();
+    },
+
+    /** 할 일의 내용·날짜·중요 표시를 수정한다 */
+    updateTodo: async (id, fields) => {
+      if (fields.title !== undefined && !fields.title.trim()) return;
+      await updateTodoRow(id, fields);
       await refresh();
     },
 
@@ -111,9 +121,17 @@ export const useTodoStore = create<TodoState>((set, get) => {
     },
 
     /** 루틴은 만든 날부터 표시한다 (과거 날짜에 갑자기 나타나지 않게) */
-    addRoutine: async (title, weekdays) => {
+    addRoutine: async (title, weekdays, important) => {
       if (!title.trim() || !weekdays.includes("1")) return;
-      await addRoutine(title, weekdays, todayString());
+      await addRoutineRow(title, weekdays, todayString(), important);
+      await refresh();
+    },
+
+    /** 루틴의 내용·요일·중요 표시를 수정한다 */
+    updateRoutineFields: async (id, fields) => {
+      if (fields.title !== undefined && !fields.title.trim()) return;
+      if (fields.weekdays !== undefined && !fields.weekdays.includes("1")) return;
+      await updateRoutine(id, fields);
       await refresh();
     },
 
