@@ -6,9 +6,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
+import { Text, TextInput } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateField } from "@/src/components/DateTimeFields";
 import {

@@ -5,11 +5,12 @@
 
 import * as Location from "expo-location";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchWeather, type HourlyWeather, type WeatherData } from "@/src/api/weather";
+import { Text } from "@/src/components/AppText";
 
 // ── 날씨 아이콘 ───────────────────────────────────────────────
 

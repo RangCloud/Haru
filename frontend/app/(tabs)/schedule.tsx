@@ -17,8 +17,6 @@ import {
   AppState,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -26,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Text, TextInput } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { BudgetModal, formatAmount, TransactionRow } from "@/src/components/BudgetModal";

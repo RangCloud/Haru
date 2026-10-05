@@ -19,7 +19,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -27,6 +26,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";
+import { Text } from "@/src/components/AppText";
 
 interface BottomSheetProps {
   visible: boolean;
@@ -36,6 +36,8 @@ interface BottomSheetProps {
   children: ReactNode;
   /** 스크롤 영역 아래에 항상 보이는 영역 (예: 저장 버튼) */
   footer?: ReactNode;
+  /** false면 시트 안 스크롤을 잠근다 — 줄을 끌어 옮기는 동안 목록이 같이 움직이지 않게 할 때 쓴다 */
+  scrollEnabled?: boolean;
 }
 
 /** iOS 키보드 높이 — Android는 시스템이 창 크기를 줄여 주므로 0으로 둔다 */
@@ -50,7 +52,7 @@ function useKeyboardHeight(): number {
   return height;
 }
 
-export function BottomSheet({ visible, onClose, title, colors, children, footer }: BottomSheetProps) {
+export function BottomSheet({ visible, onClose, title, colors, children, footer, scrollEnabled = true }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const keyboard = useKeyboardHeight();
@@ -81,6 +83,7 @@ export function BottomSheet({ visible, onClose, title, colors, children, footer 
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
           >
             {children}

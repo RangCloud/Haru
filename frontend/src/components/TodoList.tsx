@@ -9,10 +9,11 @@
  * 조작: 탭 = 완료 체크, 길게 누르기 = 수정·중요 표시·삭제 메뉴.
  */
 
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
+import { Text } from "@/src/components/AppText";
 import { type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { describeWeekdays, type RoutineForDate } from "@/src/db/routine";
 import { type TodoItem } from "@/src/db/todo";

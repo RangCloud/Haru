@@ -21,13 +21,13 @@ import {
   Alert,
   Platform,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Text } from "@/src/components/AppText";
 import { useAuthStore } from "@/src/store/authStore";
 
 // expo-auth-session이 브라우저를 닫을 수 있도록 등록

@@ -69,6 +69,8 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        {/* 소비 분석 — 화면 안에 자체 헤더(뒤로 가기)가 있어 기본 헤더는 숨긴다 */}
+        <Stack.Screen name="budget-insight" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
       </Stack>
       <StatusBar style="auto" />

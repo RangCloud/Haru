@@ -21,8 +21,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 
@@ -30,6 +28,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { FriendItem, SharedScheduleItem } from "@/src/api/social";
+import { Text, TextInput } from "@/src/components/AppText";
 import { useSocialStore } from "@/src/store/socialStore";
 
 export default function SocialScreen() {

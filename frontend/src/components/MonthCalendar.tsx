@@ -11,15 +11,18 @@
  * - 수입·지출은 칸 아래 금액(−2.2만, +320만).
  * - 공휴일은 날짜를 빨간색으로, 옆에 공휴일 이름을 작게 쓴다 (예: 3 개천절).
  * - 앞뒤 달 날짜는 흐리게 채우고, 누르면 그 날짜로 이동한다.
+ * - 글자 크기 설정은 CELL_MAX_SCALE까지만 따른다. 칸이 좁아 그 이상 키우면 일정 제목이 거의 안 보인다.
+ *   커진 만큼 칸 높이도 같이 늘려 줄 수(일정 3줄)는 그대로 유지한다.
  *
  * 한 주씩 줄로 그린다 — 칸 너비를 '100/7 %' + 줄바꿈으로 두면 기기에 따라 날짜가 한 칸씩 밀렸다.
  * 스와이프는 PanResponder(React Native 기본 기능)로 구현해 새 라이브러리가 필요 없다.
  */
 
 import { useRef } from "react";
-import { PanResponder, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { PanResponder, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
+import { Text, useFontScale } from "@/src/components/AppText";
 import { buildCalendarGrid, formatCompactWon, WEEKDAYS_KO } from "@/src/utils/date";
 
 export interface CellEvent {
@@ -49,10 +52,13 @@ interface MonthCalendarProps {
 }
 
 const SWIPE_DISTANCE = 50;   // 이만큼 밀어야 달이 넘어간다
+const CELL_MAX_SCALE = 1.15;   // 달력 칸 안 글자가 커질 수 있는 최대 배율
 const MAX_ROWS = 3;          // 칸 안 일정 줄 수 (금액이 두 줄이면 한 줄 줄인다)
 
 export function MonthCalendar({ year, month, selectedDate, today, marks, holidays, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
   const weeks = buildCalendarGrid(year, month);
+  // 글자가 커지면 칸·날짜 줄·띠 높이도 같은 비율로 늘린다 (글자만 키우면 아래 줄이 잘린다)
+  const scale = useFontScale(CELL_MAX_SCALE);
 
   // PanResponder는 한 번만 만들고, 최신 콜백은 ref로 읽는다 (재생성 시 제스처가 끊기는 것 방지)
   const swipeRef = useRef(onSwipeMonth);
@@ -73,7 +79,7 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
     <View style={styles.calendar} {...pan.panHandlers}>
       <View style={styles.weekRow}>
         {WEEKDAYS_KO.map((w, i) => (
-          <Text key={w} style={[styles.weekdayText, { color: i === 0 ? colors.expense : i === 6 ? "#3B82F6" : colors.subtext }]}>
+          <Text maxScale={CELL_MAX_SCALE} key={w} style={[styles.weekdayText, { color: i === 0 ? colors.expense : i === 6 ? "#3B82F6" : colors.subtext }]}>
             {w}
           </Text>
         ))}
@@ -100,17 +106,17 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
             return (
               <TouchableOpacity
                 key={cell.date}
-                style={[styles.cell, isSelected && [styles.selectedCell, { borderColor: colors.tint }], !cell.inMonth && styles.outCell]}
+                style={[styles.cell, { height: 92 * scale }, isSelected && [styles.selectedCell, { borderColor: colors.tint }], !cell.inMonth && styles.outCell]}
                 onPress={() => onSelectDate(cell.date)}
                 activeOpacity={0.6}
                 accessibilityLabel={`${cell.day}일${holiday ? `, ${holiday}` : ""}${isToday ? ", 오늘" : ""}${events.length ? `, 일정 ${events.length}개` : ""}`}
                 accessibilityState={{ selected: isSelected }}
               >
-                <View style={styles.numRow}>
-                  <Text style={[styles.num, { color: numColor }, isToday && styles.numBold]}>{cell.day}</Text>
+                <View style={[styles.numRow, { height: 18 * scale }]}>
+                  <Text maxScale={CELL_MAX_SCALE} style={[styles.num, { color: numColor }, isToday && styles.numBold]}>{cell.day}</Text>
                   {isSelected && <View style={[styles.selectedDot, { backgroundColor: colors.tint }]} />}
                   {holiday && (
-                    <Text style={[styles.holidayName, { color: colors.expense }]} numberOfLines={1} ellipsizeMode="tail">
+                    <Text maxScale={CELL_MAX_SCALE} style={[styles.holidayName, { color: colors.expense }]} numberOfLines={1} ellipsizeMode="tail">
                       {holiday}
                     </Text>
                   )}
@@ -120,6 +126,7 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
                   if (ev.kind === "timed") {
                     return (
                       <Text
+                        maxScale={CELL_MAX_SCALE}
                         key={ev.id}
                         style={[styles.timed, { borderLeftColor: ev.color, color: colors.text }]}
                         numberOfLines={1}
@@ -137,27 +144,27 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
                       style={[
                         styles.band,
                         styles[`band_${ev.span}`],
-                        { backgroundColor: `${ev.color}33` },
+                        { backgroundColor: `${ev.color}33`, height: 14 * scale },
                       ]}
                     >
-                      <Text style={[styles.bandText, { color: ev.color }]} numberOfLines={1} ellipsizeMode="tail">
+                      <Text maxScale={CELL_MAX_SCALE} style={[styles.bandText, { color: ev.color }]} numberOfLines={1} ellipsizeMode="tail">
                         {showTitle ? ev.title : " "}
                       </Text>
                     </View>
                   );
                 })}
-                {hidden > 0 && <Text style={[styles.more, { color: colors.subtext }]}>+{hidden}</Text>}
+                {hidden > 0 && <Text maxScale={CELL_MAX_SCALE} style={[styles.more, { color: colors.subtext }]}>+{hidden}</Text>}
 
                 {/* 수입·지출 금액 — 칸 맨 아래 오른쪽 */}
                 {moneyLines > 0 && (
                   <View style={styles.money}>
                     {!!mark?.expense && (
-                      <Text style={[styles.moneyText, { color: colors.expense }]} numberOfLines={1}>
+                      <Text maxScale={CELL_MAX_SCALE} style={[styles.moneyText, { color: colors.expense }]} numberOfLines={1}>
                         −{formatCompactWon(mark.expense)}
                       </Text>
                     )}
                     {!!mark?.income && (
-                      <Text style={[styles.moneyText, { color: colors.income }]} numberOfLines={1}>
+                      <Text maxScale={CELL_MAX_SCALE} style={[styles.moneyText, { color: colors.income }]} numberOfLines={1}>
                         +{formatCompactWon(mark.income)}
                       </Text>
                     )}

@@ -1,8 +1,9 @@
 /**
- * 앱 설정 스토어 — 시작 화면·뉴스 카테고리
+ * 앱 설정 스토어 — 시작 화면·뉴스 카테고리·글자 크기
  *
  * 앱을 새로 켰을 때 먼저 보여줄 탭을 사용자가 고른다 (홈·일정·가계부·운세·뉴스).
  * 뉴스 탭에 보여줄 카테고리와 순서도 사용자가 정한다.
+ * 글자 크기는 4단계 중에서 고르며, 고르는 즉시 모든 화면의 글자에 배율로 적용된다.
  * 테마 설정(themeStore)과 같은 방식으로 SecureStore에 저장해 재시작 후에도 유지한다.
  * 민감한 값은 아니지만, 이미 쓰고 있는 저장소를 재사용해 새 라이브러리를 들이지 않기 위함이다.
  */
@@ -23,8 +24,21 @@ export const START_TAB_OPTIONS: { value: StartTab; label: string }[] = [
   { value: "news", label: "뉴스" },
 ];
 
+/** 글자 크기 4단계 — 값은 기본 글자 크기에 곱하는 배율 */
+export type FontSize = "small" | "normal" | "large" | "xlarge";
+
+export const FONT_SCALES: Record<FontSize, number> = { small: 0.9, normal: 1, large: 1.15, xlarge: 1.3 };
+
+export const FONT_SIZE_OPTIONS: { value: FontSize; label: string }[] = [
+  { value: "small", label: "작게" },
+  { value: "normal", label: "보통" },
+  { value: "large", label: "크게" },
+  { value: "xlarge", label: "아주 크게" },
+];
+
 const START_TAB_KEY = "haru_start_tab";
 const NEWS_CATEGORIES_KEY = "haru_news_categories";
+const FONT_SIZE_KEY = "haru_font_size";
 
 const ALL_NEWS = NEWS_CATEGORIES.map((c) => c.value);
 
@@ -32,14 +46,19 @@ interface SettingsState {
   startTab: StartTab;
   /** 뉴스 탭에 보여줄 카테고리 — 배열 순서가 칩 순서 (수정 3번) */
   newsCategories: NewsCategory[];
+  /** 글자 크기 단계 — 실제 배율은 FONT_SCALES[fontSize] */
+  fontSize: FontSize;
   isLoaded: boolean;       // 저장값을 읽기 전에 시작 탭을 적용하지 않도록 구분
   setStartTab: (tab: StartTab) => Promise<void>;
   setNewsCategories: (cats: NewsCategory[]) => Promise<void>;
+  setFontSize: (size: FontSize) => Promise<void>;
   loadSettings: () => Promise<void>;
 }
 
 const isStartTab = (v: string | null): v is StartTab =>
   v === "index" || v === "schedule" || v === "budget" || v === "fortune" || v === "news";
+
+const isFontSize = (v: string | null): v is FontSize => v !== null && v in FONT_SCALES;
 
 /** 저장된 값이 깨졌거나 예전 형식이어도 안전하게 복원 — 알 수 없는 값·중복은 버리고, 비면 기본값 */
 function parseNewsCategories(raw: string | null): NewsCategory[] | null {
@@ -65,6 +84,7 @@ async function save(key: string, value: string) {
 export const useSettingsStore = create<SettingsState>((set) => ({
   startTab: "index",
   newsCategories: ALL_NEWS,
+  fontSize: "normal",
   isLoaded: false,
 
   setStartTab: async (tab) => {
@@ -79,13 +99,20 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     await save(NEWS_CATEGORIES_KEY, JSON.stringify(cats));
   },
 
+  setFontSize: async (size) => {
+    set({ fontSize: size });
+    await save(FONT_SIZE_KEY, size);
+  },
+
   loadSettings: async () => {
     try {
       if (Platform.OS !== "web") {
-        const [tab, news] = await Promise.all([
+        const [tab, news, font] = await Promise.all([
           SecureStore.getItemAsync(START_TAB_KEY),
           SecureStore.getItemAsync(NEWS_CATEGORIES_KEY),
+          SecureStore.getItemAsync(FONT_SIZE_KEY),
         ]);
+        if (isFontSize(font)) set({ fontSize: font });
         if (isStartTab(tab)) set({ startTab: tab });
         const cats = parseNewsCategories(news);
         if (cats) set({ newsCategories: cats });

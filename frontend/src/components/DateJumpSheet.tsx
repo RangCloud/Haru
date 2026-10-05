@@ -8,9 +8,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
+import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { CalendarGrid } from "@/src/components/DateTimeFields";
 import { parseDate } from "@/src/utils/date";

@@ -4,11 +4,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchNews, type NewsItem } from "@/src/api/news";
+import { Text } from "@/src/components/AppText";
 
 // ── 섹션별 오류 카드 ──────────────────────────────────────────
 // 컴포넌트를 MoreScreen 밖에 정의해야 매 렌더마다 새 타입이 생성되는 React 안티패턴을 피할 수 있다.

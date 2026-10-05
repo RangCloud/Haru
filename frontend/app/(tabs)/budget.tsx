@@ -6,15 +6,18 @@
  * - 상단 '2026년 9월 ▾'를 누르면 연·월 선택, '이번 달'로 바로 복귀
  * - 수입 총액·지출 총액 요약, 전체/수입/지출 필터, 날짜별 묶음 + 그날 합계
  * - 거래 추가(지출·수입), 길게 눌러 수정·삭제
+ * - 요약 아래 '소비 분석'을 누르면 주·달·년 단위 분석 화면으로 이동
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
  */
 
+import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Text } from "@/src/components/AppText";
 import { BudgetModal, formatAmount, TransactionRow } from "@/src/components/BudgetModal";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { type Transaction } from "@/src/db/budget";
@@ -104,6 +107,17 @@ export default function BudgetScreen() {
             <Text style={[styles.summaryValue, { color: colors.expense }]}>{formatAmount(homeExpense)}</Text>
           </View>
         </View>
+
+        {/* 소비 분석 — 지금 보고 있는 달부터 보여 준다 */}
+        <TouchableOpacity
+          onPress={() => router.push("/budget-insight")}
+          style={[styles.insightBtn, { backgroundColor: colors.tintLight }]}
+          accessibilityRole="button"
+          accessibilityLabel="소비 분석 보기"
+        >
+          <Text style={[styles.insightText, { color: colors.tint }]}>소비 분석</Text>
+          <Text style={[styles.insightText, { color: colors.tint }]}>→</Text>
+        </TouchableOpacity>
 
         {/* 필터 + 추가 버튼 */}
         <View style={styles.toolbar}>
@@ -213,6 +227,8 @@ const styles = StyleSheet.create({
   summaryCaption: { fontSize: 11 },
   summaryValue: { fontSize: 17, fontWeight: "700", fontVariant: ["tabular-nums"] },
   divider: { width: 1, height: 34 },
+  insightBtn: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  insightText: { fontSize: 13, fontWeight: "700" },
   toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden" },
   segmentBtn: { paddingHorizontal: 14, paddingVertical: 8 },

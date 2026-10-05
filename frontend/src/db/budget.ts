@@ -60,6 +60,21 @@ export async function getTransactionsByMonth(
   );
 }
 
+/**
+ * 두 날짜 사이(양 끝 포함)의 거래 내역을 조회한다 — 소비 분석의 주·달·년 집계에 쓴다.
+ *
+ * date가 'YYYY-MM-DD' 문자열이라 문자열 크기 비교가 곧 날짜 비교가 된다.
+ */
+export async function getTransactionsBetween(start: string, end: string): Promise<Transaction[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<Transaction>(
+    `SELECT * FROM transactions
+     WHERE date >= ? AND date <= ?
+     ORDER BY date DESC, created_at DESC`,
+    [start, end],
+  );
+}
+
 /** 거래를 삭제한다 */
 export async function deleteTransaction(id: number): Promise<void> {
   const db = await getDatabase();

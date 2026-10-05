@@ -13,8 +13,6 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -22,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Text, TextInput } from "@/src/components/AppText";
 import { type BirthInfo, useFortuneStore } from "@/src/store/fortuneStore";
 
 // ── 생년월일 입력 폼 ───────────────────────────────────────────

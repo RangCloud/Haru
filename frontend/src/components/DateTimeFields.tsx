@@ -12,7 +12,7 @@
  */
 
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import {
@@ -25,6 +25,7 @@ import {
   todayString,
   WEEKDAYS_KO,
 } from "@/src/utils/date";
+import { Text } from "@/src/components/AppText";
 
 type ThemeColors = typeof Colors.light;
 

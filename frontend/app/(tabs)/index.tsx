@@ -11,7 +11,6 @@ import {
   AppState,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -19,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
@@ -27,7 +27,7 @@ import { type ScheduleItem } from "@/src/db/schedule";
 import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
-import { START_TAB_OPTIONS, useSettingsStore } from "@/src/store/settingsStore";
+import { FONT_SIZE_OPTIONS, START_TAB_OPTIONS, useSettingsStore } from "@/src/store/settingsStore";
 import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
@@ -75,7 +75,7 @@ function SettingsModal({
   colors: typeof Colors.light;
 }) {
   const { mode, setMode } = useThemeStore();
-  const { startTab, setStartTab } = useSettingsStore();
+  const { startTab, setStartTab, fontSize, setFontSize } = useSettingsStore();
   const { user, signOut } = useAuthStore();
 
   const handleSignOut = () => {
@@ -140,6 +140,38 @@ function SettingsModal({
         ))}
       </View>
       <Text style={[settingStyles.hint, { color: colors.subtext }]}>앱을 다시 실행할 때부터 적용됩니다.</Text>
+
+      {/* 글자 크기 — 고르는 즉시 모든 화면에 적용된다. 아래 미리보기로 바로 확인할 수 있다 */}
+      <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>글자 크기</Text>
+      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {FONT_SIZE_OPTIONS.map((opt, i) => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[
+              settingStyles.segment,
+              settingStyles.segmentCompact,
+              fontSize === opt.value && { backgroundColor: colors.tint },
+              i < FONT_SIZE_OPTIONS.length - 1 && settingStyles.segmentBorder,
+              i < FONT_SIZE_OPTIONS.length - 1 && { borderColor: colors.separator },
+            ]}
+            onPress={() => setFontSize(opt.value)}
+            accessibilityState={{ selected: fontSize === opt.value }}
+          >
+            {/* 네 칸으로 나뉘어 폭이 좁다 — '아주 크게'가 잘리지 않도록 칸에 맞춰 줄인다 */}
+            <Text
+              style={[settingStyles.segmentLabel, { color: fontSize === opt.value ? "#fff" : colors.subtext }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={[settingStyles.preview, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[settingStyles.previewTitle, { color: colors.text }]}>점심 약속 · 12:30</Text>
+        <Text style={[settingStyles.previewSub, { color: colors.subtext }]}>지출 12,000원 — 이 크기로 보여요</Text>
+      </View>
 
       {/* 계정 */}
       <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>계정</Text>
@@ -642,6 +674,10 @@ const settingStyles = StyleSheet.create({
   hint: { fontSize: 11, marginLeft: 4, marginTop: -2 },
   segmentIcon: { fontSize: 18 },
   segmentLabel: { fontSize: 12, fontWeight: "500" },
+  // 글자 크기 미리보기
+  preview: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 4 },
+  previewTitle: { fontSize: 15, fontWeight: "600" },
+  previewSub: { fontSize: 12 },
   // 리스트 카드 공통
   listCard: {
     borderRadius: 14,

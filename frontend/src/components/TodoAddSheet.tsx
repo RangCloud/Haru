@@ -12,10 +12,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
+import { Text, TextInput } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateField } from "@/src/components/DateTimeFields";
 import { WEEKDAY_LABELS, type RoutineForDate } from "@/src/db/routine";
