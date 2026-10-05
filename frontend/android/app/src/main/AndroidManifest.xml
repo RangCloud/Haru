@@ -34,6 +34,9 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="haru"/>
         <data android:scheme="exp+haru"/>
+        <!-- Google 로그인 후 앱으로 돌아오는 주소(com.rangcloud.haru:/oauth2redirect/google)를 받기 위한 스킴.
+             없으면 계정 선택 뒤 브라우저에서 앱으로 돌아오지 못한다. -->
+        <data android:scheme="com.rangcloud.haru"/>
       </intent-filter>
     </activity>
 
