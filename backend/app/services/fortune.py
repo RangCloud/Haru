@@ -8,15 +8,22 @@
 """
 
 import time
-from datetime import date
+from datetime import datetime, timedelta, timezone
 
 import anthropic
 
 from app.core.config import settings
 from app.schemas.fortune import FortuneResponse
 
-# 하루 Claude API 최대 실제 호출 횟수
-DAILY_RATE_LIMIT = 50
+# 하루 Claude API 최대 실제 호출 횟수.
+# 1회 약 0.002달러(Haiku 4.5 기준)라 한도를 매일 다 채워도 월 9달러 안팎이다.
+# 운세 주소는 로그인 없이 호출할 수 있으므로, 이 값이 곧 비용 상한(안전장치)이다.
+DAILY_RATE_LIMIT = 150
+
+# 운세의 "오늘"은 한국 날짜 기준이다. 서버(Oracle Cloud) 시계는 UTC라서 그대로 쓰면
+# 운세와 하루 한도가 자정이 아니라 한국 시간 오전 9시에 바뀐다.
+# 한국은 서머타임이 없으므로 고정 +9시간 오프셋으로 충분하다 (weather.py와 같은 방식).
+KST = timezone(timedelta(hours=9))
 
 # 날별 캐시 — { "YYYY-MM-DD_cachekey": (저장_시각, FortuneResponse) }
 _cache: dict[str, tuple[float, FortuneResponse]] = {}
@@ -26,8 +33,8 @@ _daily_calls: dict[str, int] = {}
 
 
 def _today() -> str:
-    """오늘 날짜를 ISO 형식으로 반환한다 (서버가 KST 기준)"""
-    return date.today().isoformat()  # "2025-06-16"
+    """오늘 날짜(한국 시간)를 ISO 형식으로 반환한다"""
+    return datetime.now(KST).date().isoformat()  # "2025-06-16"
 
 
 def _check_and_increment(today: str) -> None:

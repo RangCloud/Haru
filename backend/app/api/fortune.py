@@ -27,7 +27,7 @@ async def fortune(
 
     - 생년월일(시)을 기반으로 개인화된 운세 생성
     - 하루 1회 Claude 실제 호출 후 캐시 (같은 날 같은 생년월일은 cached=True)
-    - 하루 최대 50회 Claude 호출 제한 (레이트 리밋)
+    - 하루 최대 150회 Claude 호출 제한 (레이트 리밋)
     """
     # 월 유형 검증
     if birth_month_type not in ("solar", "lunar"):
