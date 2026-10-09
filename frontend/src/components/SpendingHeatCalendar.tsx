@@ -9,11 +9,14 @@
  *   선택 상태는 부모(가계부 탭)가 들고 있으면서 아래 내역 목록을 그날로 좁히는 데 쓴다.
  * - 선택은 색이 아니라 테두리로 표시한다 — 칸 색(지출 정도)과 겹쳐도 구분되게 하기 위함.
  *
+ * 날짜 칸은 Pressable로 만들고 테두리는 항상 같은 두께로 둔다 — Android에서 날짜를 누르면
+ * 다른 칸이 사라지던 문제를 피하기 위함이다 (자세한 이유는 MonthCalendar 주석 참고).
+ *
  * 한 주씩 줄로 그린다 (칸 너비를 %로 주고 줄바꿈에 맡기면 날짜가 밀리는 문제는 MonthCalendar 주석 참고).
  */
 
 import { useMemo } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import { Text, useFontScale } from "@/src/components/AppText";
@@ -72,12 +75,12 @@ export function SpendingHeatCalendar({ year, month, expenseByDate, selectedDate,
 
             return (
               <View key={date} style={styles.cellSlot}>
-                <TouchableOpacity
+                <Pressable
                   onPress={() => onSelectDate(isSelected ? null : date)}
-                  style={[
+                  style={({ pressed }) => [
                     styles.cell,
-                    { height: 30 * scale, backgroundColor: background },
-                    isSelected && { borderWidth: 2, borderColor: colors.tint },
+                    { height: 30 * scale, backgroundColor: background, borderColor: isSelected ? colors.tint : "transparent" },
+                    pressed && styles.pressed,
                   ]}
                   // 칸이 작으므로 눌리는 영역을 위아래로 조금 넓힌다 (옆 칸과는 겹치지 않게 세로만)
                   hitSlop={{ top: 4, bottom: 4 }}
@@ -96,7 +99,7 @@ export function SpendingHeatCalendar({ year, month, expenseByDate, selectedDate,
                   >
                     {day}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             );
           })}
@@ -111,7 +114,8 @@ const styles = StyleSheet.create({
   weekday: { flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", paddingBottom: 4 },
   // 칸 사이 간격은 바깥 틀의 안쪽 여백으로 만든다 (gap을 쓰면 7칸 너비 계산이 기기마다 달라질 수 있다)
   cellSlot: { flex: 1, padding: 1.5 },
-  cell: { borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  cell: { borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.6 },
   dayText: { fontSize: 11.5, fontVariant: ["tabular-nums"] },
   future: { opacity: 0.55 },
   todayText: { fontWeight: "800" },

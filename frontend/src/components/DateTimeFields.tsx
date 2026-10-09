@@ -12,7 +12,7 @@
  */
 
 import { useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import {
@@ -62,9 +62,10 @@ export function CalendarGrid({ year, month, getState, onSelect, colors }: Calend
             const st = getState(date);
             const isToday = date === today;
             return (
-              <TouchableOpacity
+              // 날짜 칸은 Pressable — Android에서 날짜를 누르면 다른 칸이 사라지던 문제 방지 (MonthCalendar 주석 참고)
+              <Pressable
                 key={date}
-                style={[grid.cell, st.inRange && { backgroundColor: colors.tintLight }]}
+                style={({ pressed }) => [grid.cell, st.inRange && { backgroundColor: colors.tintLight }, pressed && grid.pressed]}
                 onPress={() => onSelect(date)}
                 disabled={st.disabled}
                 accessibilityLabel={formatFullDate(date)}
@@ -83,7 +84,7 @@ export function CalendarGrid({ year, month, getState, onSelect, colors }: Calend
                     {day}
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -295,6 +296,7 @@ const grid = StyleSheet.create({
   row: { flexDirection: "row" },
   weekday: { flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", marginBottom: 4 },
   cell: { flex: 1, height: 38, alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.6 },
   circle: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   dayText: { fontSize: 14 },
   bold: { fontWeight: "700" },

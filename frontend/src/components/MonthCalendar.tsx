@@ -14,6 +14,15 @@
  * - 글자 크기 설정은 CELL_MAX_SCALE까지만 따른다. 칸이 좁아 그 이상 키우면 일정 제목이 거의 안 보인다.
  *   커진 만큼 칸 높이도 같이 늘려 줄 수(일정 3줄)는 그대로 유지한다.
  *
+ * 날짜 칸은 TouchableOpacity가 아니라 Pressable로 만든다.
+ * Android에서 날짜를 누르면 누른 칸만 남고 나머지 칸의 내용이 전부 사라졌다가, 다른 탭에 다녀오면
+ * 다시 나타나는 문제가 있었다. TouchableOpacity는 칸마다 투명도 애니메이션을 따로 들고 있는데,
+ * 달력은 날짜를 누를 때마다 35~42칸이 한꺼번에 다시 그려지면서 누르지 않은 칸의 투명도가
+ * 되돌아오지 않는 것으로 보인다(누른 칸만 애니메이션이 1로 끝나 보였다).
+ * Pressable은 애니메이션 없이 눌린 동안만 스타일을 바꾸므로 이 문제가 생기지 않는다.
+ * 같은 이유로 선택 테두리도 "있다/없다"로 바꾸지 않고, 항상 같은 두께로 두고 색만 투명 ↔ 인디고로 바꾼다
+ * (테두리가 생기고 없어질 때 칸의 그리기 방식이 바뀌는 것을 피한다).
+ *
  * 한 주씩 줄로 그린다 — 칸 너비를 '100/7 %' + 줄바꿈으로 두면 기기에 따라 날짜가 한 칸씩 밀렸다.
  * 스와이프는 PanResponder(React Native 기본 기능)로 구현해 새 라이브러리가 필요 없다.
  * 달력은 세로로 스크롤되는 화면 안에 있어서, 손가락이 조금만 위아래로 움직여도 스크롤이 제스처를
@@ -22,7 +31,7 @@
  */
 
 import { useRef } from "react";
-import { PanResponder, StyleSheet, TouchableOpacity, View } from "react-native";
+import { PanResponder, Pressable, StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import { Text, useFontScale } from "@/src/components/AppText";
@@ -122,11 +131,16 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
             const numColor = isToday ? colors.tint : holiday || dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
 
             return (
-              <TouchableOpacity
+              <Pressable
                 key={cell.date}
-                style={[styles.cell, { height: 92 * scale }, isSelected && [styles.selectedCell, { borderColor: colors.tint }], !cell.inMonth && styles.outCell]}
+                style={({ pressed }) => [
+                  styles.cell,
+                  { height: 92 * scale, borderColor: isSelected ? colors.tint : "transparent" },
+                  !cell.inMonth && styles.outCell,
+                  // 눌린 동안만 살짝 흐리게 — 앞뒤 달 칸은 이미 흐리므로 조금 더 흐리게 한다
+                  pressed && (cell.inMonth ? styles.pressedCell : styles.pressedOutCell),
+                ]}
                 onPress={() => onSelectDate(cell.date)}
-                activeOpacity={0.6}
                 accessibilityLabel={`${cell.day}일${holiday ? `, ${holiday}` : ""}${isToday ? ", 오늘" : ""}${events.length ? `, 일정 ${events.length}개` : ""}`}
                 accessibilityState={{ selected: isSelected }}
               >
@@ -188,7 +202,7 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
                     )}
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -205,11 +219,12 @@ const styles = StyleSheet.create({
   // minWidth 0 + overflow hidden: 긴 제목이 칸을 밀어 넓히거나 옆 칸으로 넘어가지 않게 한다
   cell: {
     flex: 1, minWidth: 0, height: 92, overflow: "hidden",
-    paddingTop: 4, paddingBottom: 3, paddingHorizontal: 2, gap: 2, borderRadius: 9,
+    // 테두리(1.5)는 모든 칸에 항상 있고 색만 바뀐다 — 안쪽 여백은 테두리 두께를 뺀 값이다
+    borderWidth: 1.5, paddingTop: 2.5, paddingBottom: 1.5, paddingHorizontal: 0.5, gap: 2, borderRadius: 9,
   },
-  // 선택한 날: 칸 테두리만 (테두리 두께만큼 안쪽 여백이 줄어 내용이 흔들리지 않도록 여백을 같이 줄인다)
-  selectedCell: { borderWidth: 1.5, paddingTop: 2.5, paddingBottom: 1.5, paddingHorizontal: 0.5 },
   outCell: { opacity: 0.32 },
+  pressedCell: { opacity: 0.6 },
+  pressedOutCell: { opacity: 0.2 },
   numRow: { flexDirection: "row", alignItems: "center", gap: 3, paddingLeft: 4, paddingRight: 2, height: 18 },
   // 공휴일 이름은 남는 폭 안에서만 — 길면 '…'
   holidayName: { flexShrink: 1, fontSize: 8.5, fontWeight: "600" },
