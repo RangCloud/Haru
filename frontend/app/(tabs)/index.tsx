@@ -24,7 +24,7 @@ import { CalendarImportSheet } from "@/src/components/CalendarImportSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
-import { type ScheduleItem } from "@/src/db/schedule";
+import { countImportedSchedules, deleteImportedSchedules, type ScheduleItem } from "@/src/db/schedule";
 import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
@@ -79,6 +79,40 @@ function SettingsModal({
   const { startTab, setStartTab, fontSize, setFontSize } = useSettingsStore();
   const { user, signOut } = useAuthStore();
   const [importVisible, setImportVisible] = useState(false);
+  const reloadSchedules = useScheduleStore((s) => s.reload);
+  // 기기 캘린더에서 가져온 일정 수 — 0이면 '지우기' 줄을 숨긴다
+  const [importedCount, setImportedCount] = useState(0);
+
+  // 설정 창을 열 때와 가져오기 창을 닫은 직후에 다시 센다 (방금 가져온 일정이 반영되도록)
+  useEffect(() => {
+    if (!visible || importVisible) return;
+    countImportedSchedules().then(setImportedCount).catch(() => setImportedCount(0));
+  }, [visible, importVisible]);
+
+  const handleClearImported = () => {
+    Alert.alert(
+      "가져온 일정 지우기",
+      `캘린더에서 가져온 일정 ${importedCount}개를 모두 지울까요?
+
+하루에서 직접 만든 일정과 폰의 캘린더 원본은 그대로 남아요. 가져온 뒤 하루에서 고친 내용은 함께 지워져요.`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "지우기", style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteImportedSchedules();
+              // 달력과 홈의 오늘 일정에서 바로 사라지도록 목록을 새로 읽는다
+              await reloadSchedules();
+              setImportedCount(0);
+            } catch {
+              Alert.alert("오류", "일정을 지우지 못했어요. 잠시 후 다시 시도해 주세요.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleSignOut = () => {
     Alert.alert("로그아웃", "로그아웃할까요?", [
@@ -190,6 +224,23 @@ function SettingsModal({
           <Text style={[settingStyles.listValue, { color: colors.subtext }]}>→</Text>
         </View>
       </TouchableOpacity>
+      {/* 가져온 일정이 있을 때만 보인다 — 잘못 가져왔거나 처음 상태로 되돌리고 싶을 때 쓴다 */}
+      {importedCount > 0 && (
+        <TouchableOpacity
+          style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+          onPress={handleClearImported}
+          accessibilityRole="button"
+        >
+          <View style={settingStyles.listRow}>
+            <View style={settingStyles.listContent}>
+              <Text style={[settingStyles.listLabel, { color: colors.expense }]}>가져온 일정 모두 지우기</Text>
+              <Text style={[settingStyles.listSub, { color: colors.subtext }]}>
+                가져온 일정 {importedCount}개 · 직접 만든 일정은 남아요
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
       {/* 설정 시트 안쪽에 둔다 — iOS는 나란히 놓인 두 창을 동시에 띄우지 못하고, 안쪽에 놓인 창만 위에 겹쳐 띄울 수 있다 */}
       <CalendarImportSheet visible={importVisible} onClose={() => setImportVisible(false)} colors={colors} />
 

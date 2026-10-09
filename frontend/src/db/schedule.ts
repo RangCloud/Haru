@@ -118,6 +118,26 @@ export async function importSchedules(
   return { added, skipped };
 }
 
+/** 기기 캘린더에서 가져온 일정이 몇 개인지 센다 (설정의 '가져온 일정 지우기' 안내용) */
+export async function countImportedSchedules(): Promise<number> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM schedules WHERE source_id != ''");
+  return row?.n ?? 0;
+}
+
+/**
+ * 기기 캘린더에서 가져온 일정만 모두 지운다. 하루에서 직접 만든 일정(source_id가 빈 문자열)은 건드리지 않는다.
+ * 가져온 뒤 하루에서 제목·색 등을 고친 일정도 "가져온 일정"이므로 함께 지워진다.
+ * 기기 캘린더 원본은 그대로이므로, 지운 뒤 다시 가져오기를 하면 복구할 수 있다.
+ *
+ * @returns 지운 일정 수
+ */
+export async function deleteImportedSchedules(): Promise<number> {
+  const db = await getDatabase();
+  const result = await db.runAsync("DELETE FROM schedules WHERE source_id != ''");
+  return result.changes;
+}
+
 /** 일정을 삭제한다 */
 export async function deleteSchedule(id: number): Promise<void> {
   const db = await getDatabase();
