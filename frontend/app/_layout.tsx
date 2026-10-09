@@ -53,7 +53,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isLoaded) return;
 
-    const inAuthGroup = segments[0] === "(auth)";
+    // Google 로그인 복귀 화면(oauth2redirect)도 로그인 흐름의 일부로 본다.
+    // 여기서 로그인 화면으로 replace 하면 로그인 화면이 새로 만들어져 진행 중이던 인증 요청이 사라진다.
+    const first: string | undefined = segments[0];
+    const inAuthGroup = first === "(auth)" || first === "oauth2redirect";
 
     if (!user && !inAuthGroup) {
       // 비로그인 상태인데 탭에 있으면 로그인 화면으로
@@ -71,6 +74,8 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         {/* 소비 분석 — 화면 안에 자체 헤더(뒤로 가기)가 있어 기본 헤더는 숨긴다 */}
         <Stack.Screen name="budget-insight" options={{ headerShown: false }} />
+        {/* Google 로그인 복귀 주소 — 열리자마자 로그인 화면으로 돌아가는 빈 화면. 전환 효과 없이 처리한다 */}
+        <Stack.Screen name="oauth2redirect/google" options={{ headerShown: false, animation: "none" }} />
         <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
       </Stack>
       <StatusBar style="auto" />
