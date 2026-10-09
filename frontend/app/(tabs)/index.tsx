@@ -20,6 +20,7 @@ import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
+import { CalendarImportSheet } from "@/src/components/CalendarImportSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
@@ -77,6 +78,7 @@ function SettingsModal({
   const { mode, setMode } = useThemeStore();
   const { startTab, setStartTab, fontSize, setFontSize } = useSettingsStore();
   const { user, signOut } = useAuthStore();
+  const [importVisible, setImportVisible] = useState(false);
 
   const handleSignOut = () => {
     Alert.alert("로그아웃", "로그아웃할까요?", [
@@ -172,6 +174,24 @@ function SettingsModal({
         <Text style={[settingStyles.previewTitle, { color: colors.text }]}>점심 약속 · 12:30</Text>
         <Text style={[settingStyles.previewSub, { color: colors.subtext }]}>지출 12,000원 — 이 크기로 보여요</Text>
       </View>
+
+      {/* 기기 캘린더에서 일정 가져오기 — 삼성 캘린더·Google 캘린더 등에 적어 둔 일정을 하루로 복사한다 */}
+      <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>일정</Text>
+      <TouchableOpacity
+        style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+        onPress={() => setImportVisible(true)}
+        accessibilityRole="button"
+      >
+        <View style={settingStyles.listRow}>
+          <View style={settingStyles.listContent}>
+            <Text style={[settingStyles.listLabel, { color: colors.text }]}>캘린더에서 일정 가져오기</Text>
+            <Text style={[settingStyles.listSub, { color: colors.subtext }]}>폰의 캘린더 일정을 하루로 복사해요</Text>
+          </View>
+          <Text style={[settingStyles.listValue, { color: colors.subtext }]}>→</Text>
+        </View>
+      </TouchableOpacity>
+      {/* 설정 시트 안쪽에 둔다 — iOS는 나란히 놓인 두 창을 동시에 띄우지 못하고, 안쪽에 놓인 창만 위에 겹쳐 띄울 수 있다 */}
+      <CalendarImportSheet visible={importVisible} onClose={() => setImportVisible(false)} colors={colors} />
 
       {/* 계정 */}
       <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>계정</Text>

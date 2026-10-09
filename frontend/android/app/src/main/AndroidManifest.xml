@@ -3,6 +3,10 @@
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <!-- 기기 캘린더에서 일정 가져오기용. 앱은 읽기만 하지만, 캘린더 모듈(expo-calendar)이
+       읽기·쓰기 권한이 둘 다 있어야 동작하도록 만들어져 있어 쓰기 권한도 함께 선언한다. -->
+  <uses-permission android:name="android.permission.READ_CALENDAR"/>
+  <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>

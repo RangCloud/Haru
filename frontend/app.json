@@ -27,7 +27,9 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -64,6 +66,12 @@
           "icon": "./assets/images/icon.png",
           "color": "#6B6EE7",
           "sounds": []
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "캘린더에 있는 일정을 하루로 가져오기 위해 캘린더 접근 권한이 필요합니다. 일정은 기기 안에서만 복사되며 서버로 전송되지 않습니다."
         }
       ],
       [

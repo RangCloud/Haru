@@ -24,6 +24,8 @@ export interface ScheduleItem {
   note: string;
   color: string;       // 일정 색상 hex — 기본값 '#6B6EE7'
   created_at: string;  // ISO 8601
+  /** 기기 캘린더에서 가져온 일정의 출처 표식. 직접 만든 일정은 "" (화면에서는 쓰지 않는다) */
+  source_id?: string;
 }
 
 export type NewScheduleItem = Omit<ScheduleItem, "id" | "created_at">;
@@ -75,6 +77,45 @@ export async function getSchedulesOnDate(date: string): Promise<ScheduleItem[]> 
     [date, date],
   );
   return sortForDate(rows, date);
+}
+
+/**
+ * 기기 캘린더에서 가져온 일정을 한꺼번에 넣는다.
+ *
+ * source_id가 이미 있는 일정은 건너뛴다 — 가져오기를 여러 번 눌러도 중복되지 않고,
+ * 앞서 가져온 뒤 하루에서 고친 내용(제목·색 등)도 덮어쓰지 않는다.
+ * 중간에 실패하면 일부만 들어간 상태로 남지 않도록 트랜잭션으로 묶는다.
+ *
+ * @returns added = 새로 넣은 수, skipped = 이미 있어서 건너뛴 수
+ */
+export async function importSchedules(
+  items: (NewScheduleItem & { source_id: string })[],
+): Promise<{ added: number; skipped: number }> {
+  const db = await getDatabase();
+  let added = 0;
+  let skipped = 0;
+  const createdAt = new Date().toISOString();
+
+  await db.withTransactionAsync(async () => {
+    for (const s of items) {
+      const exists = await db.getFirstAsync<{ id: number }>(
+        "SELECT id FROM schedules WHERE source_id = ? LIMIT 1",
+        [s.source_id],
+      );
+      if (exists) {
+        skipped += 1;
+        continue;
+      }
+      await db.runAsync(
+        `INSERT INTO schedules (title, date, end_date, time, end_time, note, color, created_at, source_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [s.title, s.date, s.end_date, s.time, s.end_time, s.note, s.color, createdAt, s.source_id],
+      );
+      added += 1;
+    }
+  });
+
+  return { added, skipped };
 }
 
 /** 일정을 삭제한다 */

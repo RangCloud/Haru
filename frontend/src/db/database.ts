@@ -133,5 +133,21 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     });
   }
 
+  // ── 마이그레이션 v3 → v4: 기기 캘린더에서 가져온 일정 표식 ──
+  // source_id: 기기 캘린더의 어느 일정에서 왔는지(기기 일정 ID + 시작 시각). 직접 만든 일정은 빈 문자열.
+  // 가져오기를 다시 눌러도 같은 일정이 두 번 들어가지 않게 하는 데만 쓴다.
+  // 컬럼을 "추가"만 하므로 기존 일정은 그대로 유지된다.
+  if (schemaVersion < 4) {
+    const db = _db;
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        ALTER TABLE schedules ADD COLUMN source_id TEXT NOT NULL DEFAULT '';
+        -- 가져올 때마다 "이미 있는 일정인가"를 찾으므로 인덱스를 둔다
+        CREATE INDEX IF NOT EXISTS idx_schedules_source ON schedules(source_id);
+        PRAGMA user_version = 4;
+      `);
+    });
+  }
+
   return _db;
 }

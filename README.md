@@ -24,6 +24,7 @@ iOS · Android 단일 코드베이스(Expo) + FastAPI 백엔드로 만든 개인
   - 칸당 최대 3줄, 넘치면 `+N`, 긴 제목은 말줄임표
   - 날짜별 **수입·지출 금액**(−2.2만, +320만)을 칸 아래에 표시
 - **공휴일**: 빨간 날짜와 공휴일 이름 표시 (한국천문연구원 특일 정보)
+- **캘린더에서 가져오기**: 삼성 캘린더·Google 캘린더·iPhone 캘린더의 일정을 하루로 복사 (설정에서 실행, 기기 안에서만 처리, 다시 가져와도 중복 없음)
 - 좌우로 밀어 달 이동, 월 제목을 눌러 연·월·일로 바로 이동, 오늘 버튼
 - 앞뒤 달 날짜도 흐리게 표시하고 누르면 그 달로 이동
 - **일정 추가**: 시작일~종료일과 시작~종료 시간을 한 패널에서 선택, 색상 지정
@@ -33,6 +34,7 @@ iOS · Android 단일 코드베이스(Expo) + FastAPI 백엔드로 만든 개인
 
 ### 가계부
 - 월별 수입·지출 내역을 날짜별로 묶어 그날 합계와 함께 표시, 전체/수입/지출 필터
+- **날짜별 지출 달력**: 많이 쓴 날일수록 진하게 표시, 날짜를 누르면 그날 내역만 보기
 - 홈 가계부 카드와 같은 달을 보며, 연·월을 골라 이동
 - **소비 분석**: 주·달·년 단위로 총 지출과 직전 기간 대비 증감, 카테고리별 금액·비율, 한마디 요약
   - 진행 중인 기간은 직전 기간의 같은 날 수와 비교 (예: 10월 1~5일 ↔ 9월 1~5일)
@@ -73,7 +75,7 @@ iOS · Android 단일 코드베이스(Expo) + FastAPI 백엔드로 만든 개인
 **프론트엔드** — `frontend/`
 - Expo SDK 54 (React Native 0.81) + TypeScript
 - expo-router(파일 기반 라우팅), expo-sqlite, Zustand
-- expo-location, expo-notifications, expo-secure-store
+- expo-location, expo-notifications, expo-secure-store, expo-calendar
 - Google 로그인(expo-auth-session), Apple 로그인(expo-apple-authentication)
 - 빌드·배포: EAS Build / EAS Submit
 

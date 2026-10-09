@@ -38,22 +38,11 @@ import { useHolidayStore } from "@/src/store/holidayStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
 import { formatMonthDay, parseDate, shiftMonth, toDateStr, todayString } from "@/src/utils/date";
 import { scheduleEventNotification } from "@/src/utils/notifications";
+import { SCHEDULE_COLORS } from "@/src/utils/scheduleColors";
 import { lastDayOf, periodLabel, timeLabelOn } from "@/src/utils/scheduleText";
 
 type ThemeColors = (typeof Colors)["light"];
 
-// ── 색상 팔레트 ───────────────────────────────────────────────
-// 일정별 색상 선택 시 제공할 색상 목록 — 각 색에 사용자가 이름(카테고리)을 붙일 수 있다
-const SCHEDULE_COLORS = [
-  "#6B6EE7", // 인디고 (기본)
-  "#3B82F6", // 파랑
-  "#0EA5E9", // 하늘
-  "#10B981", // 초록
-  "#F59E0B", // 노랑
-  "#F97316", // 주황
-  "#EF4444", // 빨강
-  "#EC4899", // 분홍
-];
 
 // ── 유틸 ─────────────────────────────────────────────────────
 

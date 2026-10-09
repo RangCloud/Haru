@@ -45,6 +45,8 @@ interface ScheduleState {
   add: (s: NewScheduleItem) => Promise<void>;
   update: (id: number, s: Partial<NewScheduleItem>) => Promise<void>;
   remove: (id: number) => Promise<void>;
+  /** DB가 스토어 밖에서 바뀐 뒤(기기 캘린더 가져오기 등) 화면 목록을 새로 읽는다 */
+  reload: () => Promise<void>;
 }
 
 // ── 헬퍼 ──────────────────────────────────────────────────────
@@ -145,5 +147,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => {
       await deleteSchedule(id);
       await refresh();
     },
+
+    reload: refresh,
   };
 });
