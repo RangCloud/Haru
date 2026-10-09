@@ -260,11 +260,7 @@ def build_message(now: datetime) -> str:
             for path, codes in sorted(stats["error_codes"].items(), key=lambda kv: -sum(kv[1].values())):
                 label = API_LABELS.get(path, f"기타 {path}")
                 detail.append(f"{label}: {describe_errors(codes)}")
-            sections.append("**오류 내역 (어제)**
-```
-" + "
-".join(detail[:8]) + "
-```")
+            sections.append("**오류 내역 (어제)**\n```\n" + "\n".join(detail[:8]) + "\n```")
 
         # ── 운세 AI 호출 ──
         calls, limited = stats["fortune_ai_calls"], stats["fortune_limited"]
