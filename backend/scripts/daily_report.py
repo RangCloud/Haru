@@ -90,10 +90,12 @@ def summarize_requests(lines: list[str]) -> dict:
     접속 기록에서 API별 요청 수·오류 수, 운세 AI 실제 호출 수, 서버 기동 횟수를 센다.
 
     - 오류 = 상태 코드 400 이상. 운세 429는 '하루 한도 초과'라 따로 센다.
+      어떤 오류였는지 보고에서 바로 알 수 있도록 상태 코드별로도 센다 (error_codes).
     - 서버 기동 횟수 = "Application startup complete" 줄 수. 배포로 재시작한 것도 포함된다.
     """
     total: Counter[str] = Counter()
     errors: Counter[str] = Counter()
+    error_codes: dict[str, Counter[int]] = {}
     fortune_limited = 0
     fortune_ai_calls = 0
     startups = 0
@@ -114,14 +116,36 @@ def summarize_requests(lines: list[str]) -> dict:
             fortune_limited += 1
         elif status >= 400:
             errors[path] += 1
+            error_codes.setdefault(path, Counter())[status] += 1
 
     return {
         "total": total,
         "errors": errors,
+        "error_codes": error_codes,
         "fortune_limited": fortune_limited,
         "fortune_ai_calls": fortune_ai_calls,
         "startups": startups,
     }
+
+
+# 상태 코드를 사람이 읽을 말로 — 보고를 받은 사람이 서버에 접속하지 않고도 원인을 짐작할 수 있게 한다
+STATUS_HINTS = {
+    404: "없는 주소",
+    405: "허용되지 않은 방식",
+    422: "요청 값 오류",
+    429: "요청 과다",
+    500: "서버 내부 오류",
+    502: "외부 API 실패",
+}
+
+
+def describe_errors(codes: Counter[int]) -> str:
+    """{502: 2, 422: 1} → '502 외부 API 실패 2건, 422 요청 값 오류 1건' (많은 순)"""
+    parts = []
+    for status, count in codes.most_common():
+        hint = STATUS_HINTS.get(status)
+        parts.append(f"{status}{' ' + hint if hint else ''} {count}건")
+    return ", ".join(parts)
 
 
 def memory_usage() -> tuple[float, float]:
@@ -223,13 +247,24 @@ def build_message(now: datetime) -> str:
             lines.append(f"{label:<4} {count:>6,}건" + (f"  (오류 {err}건)" if err else ""))
         others = sum(c for p, c in stats["total"].items() if p not in API_LABELS)
         if others:
-            lines.append(f"기타 {others:>6,}건")
+            other_errors = sum(c for p, c in stats["errors"].items() if p not in API_LABELS)
+            lines.append(f"기타 {others:>6,}건" + (f"  (오류 {other_errors}건)" if other_errors else ""))
         lines.append(f"합계 {sum(stats['total'].values()):>6,}건")
         sections.append("**API 사용량 (어제)**\n```\n" + "\n".join(lines) + "\n```")
 
         total_errors = sum(stats["errors"].values())
         if total_errors:
             warnings.append(f"어제 오류 응답이 {total_errors}건 있었습니다.")
+            # 어느 API에서 어떤 오류였는지 — 앱이 쓰지 않는 주소(기타)는 대개 외부에서 훑고 지나간 요청이다
+            detail = []
+            for path, codes in sorted(stats["error_codes"].items(), key=lambda kv: -sum(kv[1].values())):
+                label = API_LABELS.get(path, f"기타 {path}")
+                detail.append(f"{label}: {describe_errors(codes)}")
+            sections.append("**오류 내역 (어제)**
+```
+" + "
+".join(detail[:8]) + "
+```")
 
         # ── 운세 AI 호출 ──
         calls, limited = stats["fortune_ai_calls"], stats["fortune_limited"]
