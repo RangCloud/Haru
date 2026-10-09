@@ -6,7 +6,8 @@
  * - 상단 '2026년 9월 ▾'를 누르면 연·월 선택, '이번 달'로 바로 복귀
  * - 수입 총액·지출 총액 요약, 전체/수입/지출 필터, 날짜별 묶음 + 그날 합계
  * - 거래 추가(지출·수입), 길게 눌러 수정·삭제
- * - 요약 아래 '소비 분석'을 누르면 주·달·년 단위 분석 화면으로 이동
+ * - 날짜별 지출 달력: 많이 쓴 날일수록 칸이 진해지고, 날짜를 누르면 아래 내역이 그날로 좁혀진다
+ * - 달력 카드의 '소비 분석'을 누르면 주·달·년 단위 분석 화면으로 이동
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
  */
 
@@ -20,6 +21,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
 import { BudgetModal, formatAmount, TransactionRow } from "@/src/components/BudgetModal";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
+import { SpendingHeatCalendar } from "@/src/components/SpendingHeatCalendar";
 import { type Transaction } from "@/src/db/budget";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { formatMonthDay, todayString } from "@/src/utils/date";
@@ -44,6 +46,8 @@ export default function BudgetScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<"income" | "expense">("expense");
   const [editing, setEditing] = useState<Transaction | undefined>();
+  // 지출 달력에서 고른 날짜 — null이면 한 달 전체 내역을 보여 준다
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // 탭에 들어올 때 지금 보고 있는 달을 새로 읽는다 (다른 탭에서 거래가 바뀌었을 수 있음)
   useEffect(() => {
@@ -51,12 +55,30 @@ export default function BudgetScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 다른 달로 넘어가면 고른 날짜는 의미가 없어지므로 푼다
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [year, month]);
+
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
+  const today = todayString();
 
-  // 필터 적용 후 날짜별로 묶는다 — DB가 최신 날짜순으로 주므로 순서는 그대로 유지된다
+  // 달력 색칠용 날짜별 지출 합계 — 수입/지출 필터와 상관없이 항상 지출만 센다
+  const expenseByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of homeTransactions) {
+      if (t.type === "expense") map[t.date] = (map[t.date] ?? 0) + t.amount;
+    }
+    return map;
+  }, [homeTransactions]);
+
+  // 필터(전체/수입/지출)와 달력에서 고른 날짜를 적용한 뒤 날짜별로 묶는다
+  // — DB가 최신 날짜순으로 주므로 순서는 그대로 유지된다
   const groups = useMemo(() => {
-    const list = filter === "all" ? homeTransactions : homeTransactions.filter((t) => t.type === filter);
+    const list = homeTransactions.filter(
+      (t) => (filter === "all" || t.type === filter) && (selectedDate === null || t.date === selectedDate),
+    );
     const map = new Map<string, Transaction[]>();
     for (const t of list) {
       const arr = map.get(t.date) ?? [];
@@ -64,10 +86,10 @@ export default function BudgetScreen() {
       map.set(t.date, arr);
     }
     return [...map.entries()];
-  }, [homeTransactions, filter]);
+  }, [homeTransactions, filter, selectedDate]);
 
-  // 새 거래 기본 날짜: 이번 달이면 오늘, 다른 달이면 그 달 1일
-  const defaultDate = isCurrent ? todayString() : `${year}-${String(month).padStart(2, "0")}-01`;
+  // 새 거래 기본 날짜: 달력에서 고른 날 → 이번 달이면 오늘 → 다른 달이면 그 달 1일
+  const defaultDate = selectedDate ?? (isCurrent ? today : `${year}-${String(month).padStart(2, "0")}-01`);
 
   const openAdd = (type: "income" | "expense") => {
     setEditing(undefined);
@@ -108,16 +130,36 @@ export default function BudgetScreen() {
           </View>
         </View>
 
-        {/* 소비 분석 — 지금 보고 있는 달부터 보여 준다 */}
-        <TouchableOpacity
-          onPress={() => router.push("/budget-insight")}
-          style={[styles.insightBtn, { backgroundColor: colors.tintLight }]}
-          accessibilityRole="button"
-          accessibilityLabel="소비 분석 보기"
-        >
-          <Text style={[styles.insightText, { color: colors.tint }]}>소비 분석</Text>
-          <Text style={[styles.insightText, { color: colors.tint }]}>→</Text>
-        </TouchableOpacity>
+        {/* 날짜별 지출 달력 — 많이 쓴 날이 진하게 보인다. 소비 분석 진입도 이 카드에 둔다 */}
+        <View style={[styles.calendarCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+          <View style={styles.calendarHeader}>
+            <Text style={[styles.calendarTitle, { color: colors.subtext }]}>날짜별 지출</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/budget-insight")}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="소비 분석 보기"
+            >
+              <Text style={[styles.calendarLink, { color: colors.tint }]}>소비 분석 →</Text>
+            </TouchableOpacity>
+          </View>
+          <SpendingHeatCalendar
+            year={year}
+            month={month}
+            expenseByDate={expenseByDate}
+            selectedDate={selectedDate}
+            today={today}
+            onSelectDate={setSelectedDate}
+            colors={colors}
+          />
+          {selectedDate && (
+            <TouchableOpacity onPress={() => setSelectedDate(null)} accessibilityRole="button">
+              <Text style={[styles.calendarReset, { color: colors.tint }]}>
+                {formatMonthDay(selectedDate)} 내역만 보는 중 · 한 달 전체 보기
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* 필터 + 추가 버튼 */}
         <View style={styles.toolbar}>
@@ -150,7 +192,9 @@ export default function BudgetScreen() {
         {groups.length === 0 ? (
           <View style={styles.empty}>
             <Text style={[styles.emptyText, { color: colors.subtext }]}>
-              {filter === "all" ? `${month}월 내역이 없습니다.` : `${month}월 ${filter === "income" ? "수입" : "지출"} 내역이 없습니다.`}
+              {/* 달력에서 날짜를 골랐으면 "10월 9일 (금)", 아니면 "10월" 기준으로 안내한다 */}
+              {selectedDate ? formatMonthDay(selectedDate) : `${month}월`}
+              {filter === "all" ? " 내역이 없습니다." : ` ${filter === "income" ? "수입" : "지출"} 내역이 없습니다.`}
             </Text>
             <Text style={[styles.emptyHint, { color: colors.subtext }]}>+ 지출 · + 수입 버튼으로 추가하세요</Text>
           </View>
@@ -162,7 +206,7 @@ export default function BudgetScreen() {
               <View key={date} style={styles.group}>
                 <View style={styles.groupHeader}>
                   <Text style={[styles.groupDate, { color: colors.subtext }]}>
-                    {formatMonthDay(date)}{date === todayString() ? " · 오늘" : ""}
+                    {formatMonthDay(date)}{date === today ? " · 오늘" : ""}
                   </Text>
                   <View style={styles.groupSum}>
                     {dayIncome > 0 && <Text style={[styles.groupSumText, { color: colors.income }]}>+{formatAmount(dayIncome)}</Text>}
@@ -227,8 +271,11 @@ const styles = StyleSheet.create({
   summaryCaption: { fontSize: 11 },
   summaryValue: { fontSize: 17, fontWeight: "700", fontVariant: ["tabular-nums"] },
   divider: { width: 1, height: 34 },
-  insightBtn: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
-  insightText: { fontSize: 13, fontWeight: "700" },
+  calendarCard: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 14, gap: 8 },
+  calendarHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 },
+  calendarTitle: { fontSize: 13, fontWeight: "600" },
+  calendarLink: { fontSize: 13 },
+  calendarReset: { fontSize: 12, fontWeight: "600", textAlign: "center", paddingTop: 2 },
   toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden" },
   segmentBtn: { paddingHorizontal: 14, paddingVertical: 8 },
