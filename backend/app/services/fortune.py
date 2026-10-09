@@ -7,6 +7,7 @@
 3. 하루 최대 DAILY_RATE_LIMIT회 제한 — 캐시 미스(신규 요청)에만 차감
 """
 
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -24,6 +25,11 @@ DAILY_RATE_LIMIT = 150
 # 운세와 하루 한도가 자정이 아니라 한국 시간 오전 9시에 바뀐다.
 # 한국은 서머타임이 없으므로 고정 +9시간 오프셋으로 충분하다 (weather.py와 같은 방식).
 KST = timezone(timedelta(hours=9))
+
+# 일일 보고(scripts/daily_report.py)가 "어제 AI를 실제로 몇 번 불렀는지" 셀 수 있도록 호출 때마다 한 줄 남긴다.
+# 앱 자체 로거는 기본 수준이 WARNING이라 INFO가 기록되지 않으므로, 이미 INFO로 설정돼
+# 서버 기록(journald)에 남는 uvicorn 로거를 쓴다. 생년월일 등 요청 내용은 남기지 않고 횟수만 남긴다.
+_usage_logger = logging.getLogger("uvicorn.error")
 
 # 날별 캐시 — { "YYYY-MM-DD_cachekey": (저장_시각, FortuneResponse) }
 _cache: dict[str, tuple[float, FortuneResponse]] = {}
@@ -136,6 +142,7 @@ async def get_fortune(
 
     # 레이트 리밋 확인 + 카운터 증가
     _check_and_increment(today)
+    _usage_logger.info("FORTUNE_AI_CALL %d/%d", _daily_calls[today], DAILY_RATE_LIMIT)
 
     # Claude API 호출
     # claude-haiku-4-5: 짧은 텍스트 생성에 최적화된 소형 모델 (비용 절감)
