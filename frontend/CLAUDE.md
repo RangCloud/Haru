@@ -62,3 +62,44 @@
 
 ## 10. 금지사항 요약
 외부 키 노출 · 앱에서 외부 API 직접 호출 · 뉴스 본문 복제 · `.env` 커밋 · 승인 없는 대규모 리팩터링.
+
+## 11. 디자인 가이드라인
+> 화면·웹페이지·시안을 만들거나 고칠 때 적용한다. 사용자 요청(2026-10-09)으로 추가.
+
+### 11.1 AI가 만든 듯한 디자인 피하기 (frontend-design)
+- 내용을 **똑같은 모양의 둥근 카드**로 잘게 나누어 늘어놓지 않는다(SaaS 카드 키트).
+- **그라데이션을 장식용**으로 깔지 않는다.
+- 구조·색·글꼴은 소재(하루·달력·가계부·일정)에서 가져와 이 앱에만 있는 형식을 만든다.
+- 번호·구분선·라벨 같은 장치는 내용에 실제 의미가 있을 때만 쓴다.
+
+### 11.2 ui-ux-pro-max 스킬
+- 위치: `.claude/skills/ui-ux-pro-max/` (출처: https://github.com/nextlevelbuilder/ui-ux-pro-max-skill, MIT, 2026-10-08 커밋 1a2c459 기준 복사본)
+  - `.claude/`는 `.gitignore` 대상이라 저장소에는 올라가지 않는다. 다른 PC에서는 위 저장소에서 다시 복사한다.
+- UI 구조·색·글꼴·접근성·레이아웃을 정하거나 검토할 때 먼저 참고한다. 검색 결과는 **권고**이며 이 문서와 사용자 지시가 우선한다.
+- 실행(프로젝트 루트에서, 외부 의존성 없음):
+  - 디자인 시스템 추천: `python .claude/skills/ui-ux-pro-max/scripts/search.py "<제품·분위기 키워드>" --design-system -p "Haru"`
+  - 주제별 검색: `python .claude/skills/ui-ux-pro-max/scripts/search.py "<키워드>" --domain ux` (`style`·`color`·`typography`·`icons` 등)
+  - React Native 지침: `python .claude/skills/ui-ux-pro-max/scripts/search.py "<키워드>" --stack react-native`
+- 앱 UI를 넘기기 전에 `.claude/skills/ui-ux-pro-max/references/pro-rules.md`의 점검표를 확인한다. 핵심:
+  - 메뉴·설정·탭 같은 **구조 아이콘에 이모지를 쓰지 않는다** (벡터 아이콘 사용)
+  - 터치 영역 최소 **iOS 44pt / Android 48dp**, 누르면 80~150ms 안에 반응
+  - 본문 글자 대비 **4.5:1 이상** (라이트·다크 모두), 색은 화면별 하드코딩 대신 **의미 토큰**으로
+  - 고정 헤더·탭 바는 **안전 영역**을 지키고, 간격은 4/8 단위로 맞춘다
+
+### 11.3 디자인 점검 명령
+```
+hallmark audit ./landing
+```
+
+### 11.4 web-design-guidelines
+웹 페이지(지원·개인정보처리방침 페이지, 시안 HTML 등)에 적용한다.
+- Icon-only buttons need `aria-label`
+- Form controls need `<label>` or `aria-label`
+- Inputs need `autocomplete` and a meaningful `name`
+- Never `outline: none` without a focus replacement
+- Use `:focus-visible` over `:focus`
+
+앱(React Native)에서는 같은 원칙을 이렇게 옮긴다.
+- 아이콘만 있는 버튼 → `accessibilityLabel` + `accessibilityRole="button"`
+- 입력칸 → 보이는 라벨 또는 `accessibilityLabel`, 알맞은 `autoComplete`·`textContentType`·`keyboardType`
+- 포커스·선택 상태는 색만이 아니라 테두리·굵기 등 모양으로도 구분한다
