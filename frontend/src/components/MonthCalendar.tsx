@@ -16,6 +16,9 @@
  *
  * 한 주씩 줄로 그린다 — 칸 너비를 '100/7 %' + 줄바꿈으로 두면 기기에 따라 날짜가 한 칸씩 밀렸다.
  * 스와이프는 PanResponder(React Native 기본 기능)로 구현해 새 라이브러리가 필요 없다.
+ * 달력은 세로로 스크롤되는 화면 안에 있어서, 손가락이 조금만 위아래로 움직여도 스크롤이 제스처를
+ * 가져가 달이 잘 넘어가지 않았다. 그래서 가로 움직임이 보이는 즉시 달력이 제스처를 잡고,
+ * 잡은 뒤에는 스크롤에 넘겨주지 않으며, 그동안 바깥 스크롤을 잠그도록 부모에게 알린다(onSwipeActiveChange).
  */
 
 import { useRef } from "react";
@@ -48,14 +51,18 @@ interface MonthCalendarProps {
   holidays: Record<string, string>;        // { '2026-10-03': '개천절' } — 비어 있으면 공휴일 표시 없음
   onSelectDate: (date: string) => void;   // 앞뒤 달 날짜를 누르면 그 날짜가 넘어온다
   onSwipeMonth: (delta: -1 | 1) => void;
+  /** 가로 스와이프를 잡은 동안 true — 부모가 바깥 ScrollView를 잠그는 데 쓴다 */
+  onSwipeActiveChange?: (active: boolean) => void;
   colors: typeof Colors.light;
 }
 
-const SWIPE_DISTANCE = 50;   // 이만큼 밀어야 달이 넘어간다
+const SWIPE_START = 8;       // 가로로 이만큼 움직이면 스와이프로 보고 제스처를 잡는다 (작을수록 스크롤보다 먼저 잡는다)
+const SWIPE_DISTANCE = 40;   // 이만큼 밀어야 달이 넘어간다
+const SWIPE_VELOCITY = 0.35; // 짧게 튕기듯 밀어도 넘어가도록 속도로도 판정한다
 const CELL_MAX_SCALE = 1.15;   // 달력 칸 안 글자가 커질 수 있는 최대 배율
 const MAX_ROWS = 3;          // 칸 안 일정 줄 수 (금액이 두 줄이면 한 줄 줄인다)
 
-export function MonthCalendar({ year, month, selectedDate, today, marks, holidays, onSelectDate, onSwipeMonth, colors }: MonthCalendarProps) {
+export function MonthCalendar({ year, month, selectedDate, today, marks, holidays, onSelectDate, onSwipeMonth, onSwipeActiveChange, colors }: MonthCalendarProps) {
   const weeks = buildCalendarGrid(year, month);
   // 글자가 커지면 칸·날짜 줄·띠 높이도 같은 비율로 늘린다 (글자만 키우면 아래 줄이 잘린다)
   const scale = useFontScale(CELL_MAX_SCALE);
@@ -63,15 +70,26 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
   // PanResponder는 한 번만 만들고, 최신 콜백은 ref로 읽는다 (재생성 시 제스처가 끊기는 것 방지)
   const swipeRef = useRef(onSwipeMonth);
   swipeRef.current = onSwipeMonth;
+  const activeRef = useRef(onSwipeActiveChange);
+  activeRef.current = onSwipeActiveChange;
   const pan = useRef(
     PanResponder.create({
-      // Capture: 날짜 버튼보다 먼저 판단 — 가로 이동이 세로보다 확실히 클 때만 스와이프로 가져온다
-      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 15 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      // Capture: 날짜 버튼과 바깥 스크롤보다 먼저 판단한다.
+      // 가로 이동이 세로보다 크기만 하면 바로 잡는다 — 세로가 더 크면 잡지 않으므로 위아래 스크롤은 그대로 된다.
+      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > SWIPE_START && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => activeRef.current?.(true),
       onPanResponderRelease: (_, g) => {
-        if (g.dx <= -SWIPE_DISTANCE) swipeRef.current(1);       // 왼쪽으로 밀기 → 다음 달
-        else if (g.dx >= SWIPE_DISTANCE) swipeRef.current(-1);  // 오른쪽으로 밀기 → 이전 달
+        activeRef.current?.(false);
+        // 충분히 밀었거나, 짧아도 빠르게 튕겼으면 넘긴다. 방향은 실제 이동 방향(dx)으로 정한다.
+        const far = Math.abs(g.dx) >= SWIPE_DISTANCE;
+        const fast = Math.abs(g.vx) >= SWIPE_VELOCITY && Math.abs(g.dx) >= SWIPE_START * 2;
+        if (!far && !fast) return;
+        swipeRef.current(g.dx < 0 ? 1 : -1);   // 왼쪽으로 밀기 → 다음 달, 오른쪽 → 이전 달
       },
-      onPanResponderTerminationRequest: () => true,
+      // 시스템이 제스처를 끊은 경우(전화 수신 등)에도 스크롤 잠금은 반드시 푼다
+      onPanResponderTerminate: () => activeRef.current?.(false),
+      // 한번 잡은 스와이프는 스크롤에 넘겨주지 않는다 — 넘겨주면 밀던 도중에 화면이 위아래로 움직인다
+      onPanResponderTerminationRequest: () => false,
     }),
   ).current;
 

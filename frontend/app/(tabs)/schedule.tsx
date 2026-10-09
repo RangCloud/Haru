@@ -411,6 +411,8 @@ export default function ScheduleScreen() {
   useEffect(() => { loadHolidays(year); }, [year, loadHolidays]);
   // 달력의 '오늘' 기준 — 앱을 켜 둔 채 자정이 지나도 다시 그려지도록 상태로 둔다 (수정 2번)
   const [today, setToday] = useState(todayString());
+  // 달력을 좌우로 미는 동안에는 화면의 세로 스크롤을 잠근다 — 밀다가 화면이 위아래로 움직여 달이 안 넘어가던 문제 방지
+  const [calendarSwiping, setCalendarSwiping] = useState(false);
   const todayRef = useRef(today);
 
   // 첫 진입: 보고 있는 달의 일정·거래와 색상 이름을 불러온다
@@ -531,10 +533,13 @@ export default function ScheduleScreen() {
         contentContainerStyle={styles.bodyContent}
         stickyHeaderIndices={[1]}
         keyboardShouldPersistTaps="handled"
+        scrollEnabled={!calendarSwiping}
+        // iOS: 스크롤이 시작되면 한 방향으로만 움직이게 해 비스듬한 손가락 움직임에 덜 흔들린다
+        directionalLockEnabled
       >
         <MonthCalendar
           year={year} month={month} selectedDate={selectedDate} marks={marks} today={today} holidays={holidays}
-          onSelectDate={handleSelectDate} onSwipeMonth={changeMonth} colors={colors}
+          onSelectDate={handleSelectDate} onSwipeMonth={changeMonth} onSwipeActiveChange={setCalendarSwiping} colors={colors}
         />
 
         {/* 선택한 날짜 바 — 고정될 때 뒤 내용이 비치지 않도록 배경색을 칠한다.
