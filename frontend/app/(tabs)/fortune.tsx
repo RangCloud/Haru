@@ -20,8 +20,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text, TextInput } from "@/src/components/AppText";
+import { ConfirmDialog } from "@/src/components/ConfirmDialog";
 import { HourMinuteInput } from "@/src/components/TimeField";
 import { type BirthInfo, useFortuneStore } from "@/src/store/fortuneStore";
 
@@ -252,16 +252,18 @@ export default function FortuneScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 생년월일 초기화 확인 창 — iPhone·Android 모두 바깥을 눌러 닫을 수 있도록 선택 창을 쓴다
+  // 생년월일 초기화 확인 창 — 모양은 시스템 확인 창과 같지만, iPhone·Android 모두 바깥을 눌러 닫을 수 있다
   const [resetVisible, setResetVisible] = useState(false);
   const handleReset = () => setResetVisible(true);
   const resetSheet = (
-    <ActionSheet
+    <ConfirmDialog
       visible={resetVisible}
       onClose={() => setResetVisible(false)}
       title="생년월일 초기화"
-      message="생년월일을 다시 설정하면 기존 운세가 초기화됩니다. 계속할까요?"
-      actions={[{ label: "초기화", onPress: clearBirthInfo, destructive: true }]}
+      message={"생년월일을 다시 설정하면 기존 운세가 초기화됩니다.\n계속할까요?"}
+      confirmLabel="초기화"
+      onConfirm={clearBirthInfo}
+      destructive
       colors={colors}
     />
   );

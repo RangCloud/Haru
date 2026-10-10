@@ -18,10 +18,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { CalendarImportSheet } from "@/src/components/CalendarImportSheet";
+import { ConfirmDialog } from "@/src/components/ConfirmDialog";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
@@ -91,7 +91,7 @@ function SettingsModal({
     countImportedSchedules().then(setImportedCount).catch(() => setImportedCount(0));
   }, [visible, importVisible]);
 
-  // 확인 창 — 시스템 알림창 대신 선택 창을 써서 iPhone·Android 모두 바깥을 눌러 닫을 수 있게 한다
+  // 확인 창 — 모양은 시스템 확인 창과 같지만, iPhone·Android 모두 바깥을 눌러 닫을 수 있다 (ConfirmDialog)
   const [confirm, setConfirm] = useState<"clear" | "logout" | null>(null);
   const handleClearImported = () => setConfirm("clear");
   const handleSignOut = () => setConfirm("logout");
@@ -261,21 +261,25 @@ function SettingsModal({
         <Text style={[settingStyles.logoutText, { color: colors.expense }]}>로그아웃</Text>
       </TouchableOpacity>
 
-      {/* 확인 창 — 설정 창 안쪽에 둬야 iOS에서 설정 창 위에 겹쳐 뜬다 */}
-      <ActionSheet
+      {/* 확인 창(가운데 작은 창) — 설정 창 안쪽에 둬야 iOS에서 설정 창 위에 겹쳐 뜬다 */}
+      <ConfirmDialog
         visible={confirm === "clear"}
         onClose={() => setConfirm(null)}
         title="가져온 일정 지우기"
         message={`캘린더에서 가져온 일정 ${importedCount}개를 모두 지울까요?\n\n하루에서 직접 만든 일정과 폰의 캘린더 원본은 그대로 남아요. 가져온 뒤 하루에서 고친 내용은 함께 지워져요.`}
-        actions={[{ label: "모두 지우기", onPress: clearImported, destructive: true }]}
+        confirmLabel="지우기"
+        onConfirm={clearImported}
+        destructive
         colors={colors}
       />
-      <ActionSheet
+      <ConfirmDialog
         visible={confirm === "logout"}
         onClose={() => setConfirm(null)}
         title="로그아웃"
         message="로그아웃할까요?"
-        actions={[{ label: "로그아웃", onPress: logout, destructive: true }]}
+        confirmLabel="로그아웃"
+        onConfirm={logout}
+        destructive
         colors={colors}
       />
     </BottomSheet>

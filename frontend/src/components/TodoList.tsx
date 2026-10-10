@@ -16,6 +16,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text } from "@/src/components/AppText";
+import { ConfirmDialog } from "@/src/components/ConfirmDialog";
 import { type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { describeWeekdays, type RoutineForDate } from "@/src/db/routine";
 import { type TodoItem } from "@/src/db/todo";
@@ -52,7 +53,7 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
   // 길게 눌렀을 때 뜨는 창에 넣을 동작들 — 시스템 알림창 대신 선택 창을 써서 Android에서도 취소할 수 있다
   const [menuRow, setMenuRow] = useState<Row | null>(null);
   const openMenu = (row: Row) => setMenuRow(row);
-  // 루틴 삭제 확인 창에 띄울 루틴 — iPhone에서도 바깥을 눌러 닫을 수 있도록 시스템 알림창 대신 선택 창을 쓴다
+  // 루틴 삭제 확인 창에 띄울 루틴 — iPhone에서도 바깥을 눌러 닫을 수 있는 확인 창(ConfirmDialog)을 쓴다
   const [routineToDelete, setRoutineToDelete] = useState<RoutineForDate | null>(null);
 
   const menuActions = (row: Row) => {
@@ -133,12 +134,14 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
         actions={menuRow ? menuActions(menuRow) : []}
         colors={colors}
       />
-      <ActionSheet
+      <ConfirmDialog
         visible={routineToDelete !== null}
         onClose={() => setRoutineToDelete(null)}
         title="루틴 삭제"
-        message={routineToDelete ? `"${routineToDelete.title}" 루틴을 삭제할까요? 지난 체크 기록도 함께 지워집니다.` : undefined}
-        actions={routineToDelete ? [{ label: "삭제", onPress: () => removeRoutine(routineToDelete.id), destructive: true }] : []}
+        message={routineToDelete ? `"${routineToDelete.title}" 루틴을 삭제할까요?\n지난 체크 기록도 함께 지워집니다.` : undefined}
+        confirmLabel="삭제"
+        onConfirm={() => { if (routineToDelete) removeRoutine(routineToDelete.id); }}
+        destructive
         colors={colors}
       />
     </View>
