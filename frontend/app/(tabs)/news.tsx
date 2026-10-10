@@ -1,10 +1,11 @@
 /**
  * 뉴스 탭 — 카테고리별 뉴스 (피드백 19번: 카테고리 필터 + 새로고침)
+ * 목록을 좌우로 밀면 이전·다음 카테고리로 넘어간다 (칩 순서대로, 달력과 같은 미끄러지는 전환).
  * 외부 API는 반드시 백엔드(/api/news)를 경유한다.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Animated, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -13,6 +14,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchNews, NEWS_CATEGORIES, type NewsCategory, type NewsItem } from "@/src/api/news";
 import { Text } from "@/src/components/AppText";
 import { NewsCategorySheet } from "@/src/components/NewsCategorySheet";
+import { useSlideSwipe } from "@/src/hooks/useSlideSwipe";
 import { useSettingsStore } from "@/src/store/settingsStore";
 
 // ── 섹션 오류 카드 ─────────────────────────────────────────────
@@ -124,6 +126,35 @@ export default function NewsScreen() {
   const current = byCategory[category];
   const showSpinner = !current && loading;
 
+  // 칩에 보이는 순서 그대로의 카테고리 목록 — 스와이프의 이전·다음도 이 순서를 따른다
+  const visibleCategories = useMemo(
+    () => NEWS_CATEGORIES.filter((c) => newsCategories.includes(c.value))
+      .sort((a, b) => newsCategories.indexOf(a.value) - newsCategories.indexOf(b.value)),
+    [newsCategories],
+  );
+  const categoryIndex = Math.max(0, visibleCategories.findIndex((c) => c.value === category));
+
+  // 좌우로 미는 동안에는 목록의 세로 스크롤을 잠근다 (밀다가 화면이 위아래로 움직이지 않게)
+  const [swiping, setSwiping] = useState(false);
+  const { panHandlers, slideStyle } = useSlideSwipe({
+    pageIndex: categoryIndex,
+    onSwipe: (direction) => {
+      const next = visibleCategories[categoryIndex + direction];
+      if (next) setCategory(next.value);
+    },
+    // 첫 카테고리에서 오른쪽, 마지막에서 왼쪽으로는 넘길 곳이 없다 — 살짝만 따라오다 돌아간다
+    canSwipe: (direction) => categoryIndex + direction >= 0 && categoryIndex + direction < visibleCategories.length,
+    onActiveChange: setSwiping,
+  });
+
+  // 스와이프로 카테고리가 바뀌면 선택된 칩이 화면 밖에 있을 수 있다 — 칩 줄을 그 칩 위치로 옮긴다
+  const chipScrollRef = useRef<ScrollView>(null);
+  const chipX = useRef<Partial<Record<NewsCategory, number>>>({});
+  useEffect(() => {
+    const x = chipX.current[category];
+    if (x !== undefined) chipScrollRef.current?.scrollTo({ x: Math.max(0, x - 24), animated: true });
+  }, [category]);
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       {/* 제목 + 필터 + 새로고침 (상단 안전 영역 반영) */}
@@ -153,19 +184,19 @@ export default function NewsScreen() {
 
       {/* 카테고리 칩 (피드백 19번) */}
       <ScrollView
+        ref={chipScrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.chipScroll}
         contentContainerStyle={styles.chips}
       >
-        {NEWS_CATEGORIES.filter((c) => newsCategories.includes(c.value))
-          .sort((a, b) => newsCategories.indexOf(a.value) - newsCategories.indexOf(b.value))
-          .map((c) => {
+        {visibleCategories.map((c) => {
             const selected = c.value === category;
             return (
               <TouchableOpacity
                 key={c.value}
                 onPress={() => setCategory(c.value)}
+                onLayout={(e) => { chipX.current[c.value] = e.nativeEvent.layout.x; }}
                 style={[styles.chip, { borderColor: selected ? colors.tint : colors.cardBorder, backgroundColor: selected ? colors.tint : colors.card }]}
                 accessibilityState={{ selected }}
               >
@@ -175,11 +206,15 @@ export default function NewsScreen() {
           })}
       </ScrollView>
 
+      {/* 손가락은 움직이지 않는 바깥 틀이 받고, 목록 내용만 안쪽에서 미끄러진다 */}
+      <View style={styles.list} {...panHandlers}>
       <ScrollView
         style={styles.list}
         contentContainerStyle={styles.container}
+        scrollEnabled={!swiping}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
       >
+        <Animated.View style={[styles.slide, slideStyle]}>
         {showSpinner ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={colors.tint} />
@@ -207,7 +242,12 @@ export default function NewsScreen() {
             {formatUpdatedAt(current.fetchedAt)} 업데이트 · 아래로 당기거나 ↻ 버튼으로 새로고침
           </Text>
         ) : null}
+        {visibleCategories.length > 1 && (
+          <Text style={[styles.updatedAt, { color: colors.subtext }]}>좌우로 밀면 다른 카테고리로 넘어가요</Text>
+        )}
+        </Animated.View>
       </ScrollView>
+      </View>
       <NewsCategorySheet visible={editVisible} onClose={() => setEditVisible(false)} colors={colors} />
     </View>
   );
@@ -235,6 +275,8 @@ const styles = StyleSheet.create({
   centered: { justifyContent: "center", alignItems: "center", gap: 12, paddingVertical: 48 },
   statusText: { fontSize: 14 },
   container: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },
+  // 미끄러지는 안쪽 틀 — 예전에 container가 주던 항목 사이 간격을 여기서 준다
+  slide: { gap: 8 },
   screenTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5 },
   updatedAt: { fontSize: 11, textAlign: "center", marginTop: 4 },
   // ── 뉴스 ──────────────────────────────────────────────────

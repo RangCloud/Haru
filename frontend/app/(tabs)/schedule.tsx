@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text, TextInput } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateJumpSheet } from "@/src/components/DateJumpSheet";
@@ -173,21 +174,28 @@ function ScheduleRow({ item, date, label, colors, onDelete, onEdit }: {
   onEdit: () => void;
 }) {
   const barColor = item.color || colors.tint;
+  // 길게 눌렀을 때 뜨는 수정·삭제 창 — Android에서도 취소할 수 있도록 시스템 알림창 대신 쓴다
+  const [menuVisible, setMenuVisible] = useState(false);
   const period = periodLabel(item);
   const timeLabel = timeLabelOn(item, date);
 
   return (
     <TouchableOpacity
       style={[styles.scheduleRow, { borderLeftColor: barColor }]}
-      onLongPress={() =>
-        Alert.alert("일정 관리", item.title, [
-          { text: "수정", onPress: onEdit },
-          { text: "삭제", style: "destructive", onPress: onDelete },
-          { text: "취소", style: "cancel" },
-        ])
-      }
+      onLongPress={() => setMenuVisible(true)}
       activeOpacity={0.7}
     >
+      <ActionSheet
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        title="일정 관리"
+        message={item.title}
+        actions={[
+          { label: "수정", onPress: onEdit },
+          { label: "삭제", onPress: onDelete, destructive: true },
+        ]}
+        colors={colors}
+      />
       <View style={styles.scheduleMain}>
         <View style={styles.scheduleTitleRow}>
           {label ? (
@@ -463,14 +471,14 @@ export default function ScheduleScreen() {
     [year, month, monthSchedules, transactions],
   );
 
-  const handleFabPress = () => {
-    Alert.alert("추가하기", formatMonthDay(selectedDate), [
-      { text: "📅 일정 추가", onPress: () => { setEditSchedule(undefined); setScheduleModalVisible(true); } },
-      { text: "💸 지출 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("expense"); setBudgetModalVisible(true); } },
-      { text: "💰 수입 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("income"); setBudgetModalVisible(true); } },
-      { text: "취소", style: "cancel" },
-    ]);
-  };
+  // + 추가를 누르면 무엇을 추가할지 고르는 창 — 취소·바깥 누르기로 닫을 수 있다
+  const [addMenuVisible, setAddMenuVisible] = useState(false);
+  const handleFabPress = () => setAddMenuVisible(true);
+  const addActions = [
+    { label: "일정 추가", onPress: () => { setEditSchedule(undefined); setScheduleModalVisible(true); } },
+    { label: "지출 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("expense"); setBudgetModalVisible(true); } },
+    { label: "수입 추가", onPress: () => { setEditTransaction(undefined); setBudgetInitialType("income"); setBudgetModalVisible(true); } },
+  ];
 
   const isToday = selectedDate === today;
   const isThisMonth = (() => { const d = new Date(); return year === d.getFullYear() && month === d.getMonth() + 1; })();
@@ -595,6 +603,15 @@ export default function ScheduleScreen() {
           </View>
         )}
       </ScrollView>
+
+      <ActionSheet
+        visible={addMenuVisible}
+        onClose={() => setAddMenuVisible(false)}
+        title="추가하기"
+        message={formatMonthDay(selectedDate)}
+        actions={addActions}
+        colors={colors}
+      />
 
       <ScheduleModal
         visible={scheduleModalVisible}

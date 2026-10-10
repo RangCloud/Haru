@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text, TextInput } from "@/src/components/AppText";
+import { HourMinuteInput } from "@/src/components/TimeField";
 import { type BirthInfo, useFortuneStore } from "@/src/store/fortuneStore";
 
 // ── 생년월일 입력 폼 ───────────────────────────────────────────
@@ -37,19 +38,9 @@ function BirthInfoForm({
   const [month, setMonth] = useState("");
   const [monthType, setMonthType] = useState<"solar" | "lunar">("solar");
   const [day, setDay] = useState("");
-  // 시간 선택: "0"~"23" 또는 "unknown"(모름)
-  const [hourStr, setHourStr] = useState<string>("unknown");
-  // 분 선택: "0"~"59" 또는 "unknown"(모름) — 시를 고른 경우에만 보여준다
-  const [minuteStr, setMinuteStr] = useState<string>("unknown");
-
-  const HOUR_OPTIONS = [
-    "모름",
-    ...Array.from({ length: 24 }, (_, i) => `${i}시`),
-  ];
-  const MINUTE_OPTIONS = [
-    "모름",
-    ...Array.from({ length: 60 }, (_, i) => `${String(i).padStart(2, "0")}분`),
-  ];
+  // 태어난 시·분 — 모르면 null. 분은 시를 정한 경우에만 의미가 있다
+  const [hour, setHour] = useState<number | null>(null);
+  const [minute, setMinute] = useState<number | null>(null);
 
   const handleSave = () => {
     const y = parseInt(year, 10);
@@ -69,10 +60,8 @@ function BirthInfoForm({
       return;
     }
 
-    const hour = hourStr === "unknown" ? null : parseInt(hourStr, 10);
-    const minute = hour === null || minuteStr === "unknown" ? null : parseInt(minuteStr, 10);
-
-    onSave({ year: y, month: m, monthType, day: d, hour, minute });
+    // 시를 모르면 분도 보내지 않는다
+    onSave({ year: y, month: m, monthType, day: d, hour, minute: hour === null ? null : minute });
   };
 
   return (
@@ -152,61 +141,35 @@ function BirthInfoForm({
         />
       </View>
 
-      {/* 태어난 시간 */}
+      {/* 태어난 시간 — 직접 입력하거나 ▾ 목록에서 고른다 (피드백 4번). 모르면 비워 둔다 */}
       <View style={styles.fieldGroup}>
-        <Text style={[styles.fieldLabel, { color: colors.subtext }]}>태어난 시간 (선택)</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.hourScroll}
-        >
-          {HOUR_OPTIONS.map((opt, idx) => {
-            const val = idx === 0 ? "unknown" : String(idx - 1);
-            const selected = hourStr === val;
-            return (
-              <TouchableOpacity
-                key={opt}
-                style={[
-                  styles.hourChip,
-                  { borderColor: colors.cardBorder, backgroundColor: colors.card },
-                  selected && { backgroundColor: colors.tint, borderColor: colors.tint },
-                ]}
-                onPress={() => { setHourStr(val); if (val === "unknown") setMinuteStr("unknown"); }}
-              >
-                <Text style={[styles.hourChipText, { color: selected ? "#fff" : colors.subtext }]}>
-                  {opt}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* 태어난 분 — 시를 고른 경우에만 */}
-      {hourStr !== "unknown" && (
-        <View style={styles.fieldGroup}>
-          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>태어난 분 (선택)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hourScroll}>
-            {MINUTE_OPTIONS.map((opt, idx) => {
-              const val = idx === 0 ? "unknown" : String(idx - 1);
-              const selected = minuteStr === val;
-              return (
-                <TouchableOpacity
-                  key={opt}
-                  style={[
-                    styles.hourChip,
-                    { borderColor: colors.cardBorder, backgroundColor: colors.card },
-                    selected && { backgroundColor: colors.tint, borderColor: colors.tint },
-                  ]}
-                  onPress={() => setMinuteStr(val)}
-                >
-                  <Text style={[styles.hourChipText, { color: selected ? "#fff" : colors.subtext }]}>{opt}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        <View style={styles.timeHead}>
+          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>
+            태어난 시간 (선택){hour === null ? " · 모름" : ""}
+          </Text>
+          {hour !== null && (
+            <TouchableOpacity
+              onPress={() => { setHour(null); setMinute(null); }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.timeClear, { color: colors.tint }]}>모름으로</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      )}
+        <HourMinuteInput
+          hour={hour}
+          minute={minute}
+          minuteDisabled={hour === null}
+          onChange={(h, m) => {
+            // 분만 먼저 입력하면 시가 비어 있어 저장되지 않으므로, 분은 시를 정한 뒤에만 받는다
+            setHour(h);
+            setMinute(h === null ? null : m);
+          }}
+          colors={colors}
+        />
+        <Text style={[styles.timeHint, { color: colors.subtext }]}>시만 알면 분은 비워 두세요.</Text>
+      </View>
 
       <TouchableOpacity
         style={[styles.saveBtn, { backgroundColor: colors.tint }]}
@@ -296,6 +259,8 @@ export default function FortuneScreen() {
         { text: "취소", style: "cancel" },
         { text: "초기화", style: "destructive", onPress: clearBirthInfo },
       ],
+      // Android에서 창 바깥을 눌러도 닫히게 한다 (iOS는 취소 버튼으로 닫는다)
+      { cancelable: true },
     );
   };
 
@@ -387,14 +352,9 @@ const styles = StyleSheet.create({
   },
   toggleBtn: { paddingHorizontal: 14, paddingVertical: 14 },
   toggleText: { fontSize: 14, fontWeight: "600" },
-  hourScroll: { gap: 8, paddingVertical: 4 },
-  hourChip: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  hourChipText: { fontSize: 13, fontWeight: "500" },
+  timeHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  timeClear: { fontSize: 12, fontWeight: "600" },
+  timeHint: { fontSize: 11 },
   saveBtn: {
     width: "100%",
     paddingVertical: 16,

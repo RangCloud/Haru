@@ -12,7 +12,7 @@
  */
 
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Pressable, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import {
@@ -26,6 +26,7 @@ import {
   WEEKDAYS_KO,
 } from "@/src/utils/date";
 import { Text } from "@/src/components/AppText";
+import { TimeField } from "@/src/components/TimeField";
 
 type ThemeColors = typeof Colors.light;
 
@@ -171,9 +172,6 @@ export interface ScheduleWhen {
   endTime: string;   // 종료 시간 — 정하지 않으면 ''
 }
 
-const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
-const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
-
 /** 접힌 상태에서 보여줄 요약 — '9월 28일 (월) 14:00 ~ 15:30', '9월 29일 (화) 14:00 ~ 10월 2일 (금) 11:00' */
 function summarize(w: ScheduleWhen): string {
   const start = `${formatMonthDay(w.date)}${w.time ? ` ${w.time}` : ""}`;
@@ -191,7 +189,6 @@ export function ScheduleWhenField({ value, onChange, colors, initiallyOpen = fal
   const [open, setOpen] = useState(initiallyOpen);
   // 다음 탭이 종료일을 정하는지 — 시작일을 막 고른 직후에만 true
   const [pickingEnd, setPickingEnd] = useState(false);
-  const [activeTime, setActiveTime] = useState<"start" | "end">("start");
   const m = useMonthState(value.date);
 
   const selectDay = (d: string) => {
@@ -212,36 +209,9 @@ export function ScheduleWhenField({ value, onChange, colors, initiallyOpen = fal
     inRange: !!value.endDate && d > value.date && d < value.endDate,
   });
 
-  // 시간 선택 — 시를 먼저 누르면 분은 00, 종료 시간은 시작 시간이 있어야 고를 수 있다
-  const current = activeTime === "start" ? value.time : value.endTime;
-  const [h, mm] = current ? current.split(":") : ["", ""];
-  const setTime = (t: string) =>
-    onChange(activeTime === "start" ? { ...value, time: t, endTime: t ? value.endTime : "" } : { ...value, endTime: t });
-
-  const chip = (label: string, selected: boolean, onPress: () => void) => (
-    <TouchableOpacity
-      key={label}
-      onPress={onPress}
-      style={[field.chip, { borderColor: selected ? colors.tint : colors.separator, backgroundColor: selected ? colors.tint : colors.card }]}
-    >
-      <Text style={[field.chipText, { color: selected ? "#fff" : colors.text }]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
-  const timeBox = (which: "start" | "end", label: string, v: string, placeholder: string, disabled = false) => {
-    const active = activeTime === which;
-    return (
-      <TouchableOpacity
-        style={[field.timeBox, { borderColor: active ? colors.tint : colors.separator, backgroundColor: colors.background, opacity: disabled ? 0.4 : 1 }]}
-        onPress={() => setActiveTime(which)}
-        disabled={disabled}
-        accessibilityState={{ selected: active, disabled }}
-      >
-        <Text style={[field.timeLabel, { color: colors.subtext }]}>{label}</Text>
-        <Text style={[field.timeValue, { color: v ? colors.text : colors.subtext }]}>{v || placeholder}</Text>
-      </TouchableOpacity>
-    );
-  };
+  // 시작 시간을 지우면(종일) 종료 시간도 의미가 없으므로 함께 지운다
+  const setStartTime = (t: string) => onChange({ ...value, time: t, endTime: t ? value.endTime : "" });
+  const setEndTime = (t: string) => onChange({ ...value, endTime: t });
 
   return (
     <View style={field.wrap}>
@@ -261,25 +231,26 @@ export function ScheduleWhenField({ value, onChange, colors, initiallyOpen = fal
 
           <View style={[field.divider, { backgroundColor: colors.separator }]} />
 
-          {/* 시작·종료 시간을 나란히 두고, 누른 쪽을 아래 칩으로 고른다 */}
-          <View style={field.timeRow}>
-            {timeBox("start", value.endDate ? "시작 시간 (첫날)" : "시작 시간", value.time, "종일")}
-            {timeBox("end", value.endDate ? "종료 시간 (마지막 날)" : "종료 시간", value.endTime, "선택 안 함", !value.time)}
-          </View>
-          <Text style={[field.pickerLabel, { color: colors.subtext }]}>시</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={field.chips}>
-            {HOURS.map((hh) => chip(hh, hh === h, () => setTime(`${hh}:${mm || "00"}`)))}
-          </ScrollView>
-          <Text style={[field.pickerLabel, { color: colors.subtext }]}>분</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={field.chips}>
-            {MINUTES.map((m2) => chip(m2, m2 === mm, () => setTime(`${h || "09"}:${m2}`)))}
-          </ScrollView>
-          <View style={field.panelFooter}>
-            <TouchableOpacity onPress={() => setTime("")} disabled={!current}>
-              <Text style={[field.clearText, { color: current ? colors.subtext : colors.separator }]}>
-                {activeTime === "start" ? "종일로 설정" : "종료 시간 지우기"}
-              </Text>
-            </TouchableOpacity>
+          {/* 시간은 직접 입력하거나 ▾ 목록에서 고른다 (피드백 4번) — 예전의 좌우로 긴 칩 줄을 대신한다 */}
+          <TimeField
+            label={value.endDate ? "시작 시간 (첫날)" : "시작 시간"}
+            value={value.time}
+            onChange={setStartTime}
+            emptyText="종일"
+            clearLabel="종일로"
+            colors={colors}
+          />
+          {/* 종료 시간은 시작 시간이 있어야 정할 수 있다 */}
+          <TimeField
+            label={value.endDate ? "종료 시간 (마지막 날)" : "종료 시간"}
+            value={value.endTime}
+            onChange={setEndTime}
+            emptyText={value.time ? "선택 안 함" : "시작 시간을 먼저 정하세요"}
+            clearLabel="지우기"
+            disabled={!value.time}
+            colors={colors}
+          />
+          <View style={[field.panelFooter, field.panelFooterEnd]}>
             <TouchableOpacity onPress={() => setOpen(false)} style={[field.doneBtn, { backgroundColor: colors.tintLight }]}>
               <Text style={[field.doneText, { color: colors.tint }]}>완료</Text>
             </TouchableOpacity>
@@ -320,16 +291,9 @@ const field = StyleSheet.create({
   chevron: { fontSize: 10 },
   help: { fontSize: 11, lineHeight: 16, paddingHorizontal: 4 },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 4 },
-  timeRow: { flexDirection: "row", gap: 8 },
-  timeBox: { flex: 1, borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, gap: 2 },
-  timeLabel: { fontSize: 11 },
-  timeValue: { fontSize: 17, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  pickerLabel: { fontSize: 11, fontWeight: "600" },
-  chips: { gap: 6 },
-  chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
-  chipText: { fontSize: 13, fontVariant: ["tabular-nums"] },
   panelFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
-  clearText: { fontSize: 13 },
+  // '완료' 버튼만 남았으므로 오른쪽 끝에 둔다
+  panelFooterEnd: { justifyContent: "flex-end" },
   doneBtn: { borderRadius: 14, paddingHorizontal: 16, paddingVertical: 7 },
   doneText: { fontSize: 13, fontWeight: "700" },
 });

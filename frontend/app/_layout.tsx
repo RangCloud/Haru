@@ -78,7 +78,8 @@ export default function RootLayout() {
         <Stack.Screen name="oauth2redirect/google" options={{ headerShown: false, animation: "none" }} />
         <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
       </Stack>
-      <StatusBar style="auto" />
+      {/* 상태바 글자색은 기기 설정이 아니라 앱에서 고른 테마를 따른다 (다크면 밝은 글자) */}
+      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
     </ThemeProvider>
   );
 }

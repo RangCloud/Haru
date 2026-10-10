@@ -6,12 +6,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { useColorScheme as useRNColorScheme } from "react-native";
 import { useThemeStore } from "@/src/store/themeStore";
 
 export function useColorScheme(): "light" | "dark" {
   const [hasHydrated, setHasHydrated] = useState(false);
-  const system = useRNColorScheme() ?? "light";
   const { mode } = useThemeStore();
 
   useEffect(() => {
@@ -19,5 +17,5 @@ export function useColorScheme(): "light" | "dark" {
   }, []);
 
   if (!hasHydrated) return "light";
-  return mode === "system" ? system : mode;
+  return mode;
 }

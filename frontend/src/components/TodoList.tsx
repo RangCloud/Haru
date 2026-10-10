@@ -9,10 +9,12 @@
  * 조작: 탭 = 완료 체크, 길게 누르기 = 수정·중요 표시·삭제 메뉴.
  */
 
+import { useState } from "react";
 import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
+import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text } from "@/src/components/AppText";
 import { type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { describeWeekdays, type RoutineForDate } from "@/src/db/routine";
@@ -47,36 +49,39 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
     .sort((a, b) => rank(a.row) - rank(b.row) || a.index - b.index)
     .map(({ row }) => row);
 
-  const openMenu = (row: Row) => {
-    const { item } = row;
+  // 길게 눌렀을 때 뜨는 창에 넣을 동작들 — 시스템 알림창 대신 선택 창을 써서 Android에서도 취소할 수 있다
+  const [menuRow, setMenuRow] = useState<Row | null>(null);
+  const openMenu = (row: Row) => setMenuRow(row);
+
+  const menuActions = (row: Row) => {
     const importantLabel = row.important ? "중요 표시 해제" : "★ 중요 표시";
     if (row.kind === "todo") {
       const todo = row.item;
-      Alert.alert(item.title, undefined, [
-        { text: "수정", onPress: () => onEdit({ kind: "todo", item: todo }) },
-        { text: importantLabel, onPress: () => setImportant(item.id, !row.important) },
-        {
-          text: "삭제", style: "destructive",
-          onPress: () => remove(item.id),
-        },
-        { text: "취소", style: "cancel" },
-      ]);
-    } else {
-      const routine = row.item;
-      Alert.alert(routine.title, `고정 루틴 · ${describeWeekdays(routine.weekdays)}`, [
-        { text: "수정", onPress: () => onEdit({ kind: "routine", item: routine }) },
-        { text: importantLabel, onPress: () => setRoutineImportant(routine.id, !row.important) },
-        {
-          text: "루틴 삭제", style: "destructive",
-          onPress: () =>
-            Alert.alert("루틴 삭제", `"${routine.title}" 루틴을 삭제할까요?\n지난 체크 기록도 함께 지워집니다.`, [
+      return [
+        { label: "수정", onPress: () => onEdit({ kind: "todo", item: todo }) },
+        { label: importantLabel, onPress: () => setImportant(todo.id, !row.important) },
+        { label: "삭제", onPress: () => remove(todo.id), destructive: true },
+      ];
+    }
+    const routine = row.item;
+    return [
+      { label: "수정", onPress: () => onEdit({ kind: "routine", item: routine }) },
+      { label: importantLabel, onPress: () => setRoutineImportant(routine.id, !row.important) },
+      {
+        label: "루틴 삭제", destructive: true,
+        // 지난 체크 기록까지 지워지므로 한 번 더 확인한다. cancelable: Android에서 바깥을 눌러도 닫히게 한다
+        onPress: () =>
+          Alert.alert(
+            "루틴 삭제",
+            `"${routine.title}" 루틴을 삭제할까요?\n지난 체크 기록도 함께 지워집니다.`,
+            [
               { text: "취소", style: "cancel" },
               { text: "삭제", style: "destructive", onPress: () => removeRoutine(routine.id) },
-            ]),
-        },
-        { text: "취소", style: "cancel" },
-      ]);
-    }
+            ],
+            { cancelable: true },
+          ),
+      },
+    ];
   };
 
   return (
@@ -127,6 +132,14 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
           </TouchableOpacity>
         );
       })}
+      <ActionSheet
+        visible={menuRow !== null}
+        onClose={() => setMenuRow(null)}
+        title={menuRow?.item.title ?? ""}
+        message={menuRow?.kind === "routine" ? `고정 루틴 · ${describeWeekdays(menuRow.item.weekdays)}` : undefined}
+        actions={menuRow ? menuActions(menuRow) : []}
+        colors={colors}
+      />
     </View>
   );
 }

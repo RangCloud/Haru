@@ -25,6 +25,7 @@ import { DateJumpSheet } from "@/src/components/DateJumpSheet";
 import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
 import { countImportedSchedules, deleteImportedSchedules, type ScheduleItem } from "@/src/db/schedule";
+import { type Transaction } from "@/src/db/budget";
 import { useAuthStore } from "@/src/store/authStore";
 import { useBudgetStore } from "@/src/store/budgetStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
@@ -62,9 +63,9 @@ function getWeatherIcon(sky: string, rainType: string): string {
   return SKY_ICON[sky] ?? "🌤️";
 }
 
-const THEME_LABEL: Record<ThemeMode, string> = { system: "시스템", light: "라이트", dark: "다크" };
-const THEME_ICON: Record<ThemeMode, string> = { system: "⚙️", light: "☀️", dark: "🌙" };
-const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
+// 테마는 라이트·다크 두 가지만 고른다 (피드백: 시스템 모드 삭제)
+const THEME_LABEL: Record<ThemeMode, string> = { light: "라이트", dark: "다크" };
+const THEME_ORDER: ThemeMode[] = ["light", "dark"];
 
 // ── 설정 모달 (바텀 시트 스타일) ──────────────────────────────
 
@@ -111,6 +112,7 @@ function SettingsModal({
           },
         },
       ],
+      { cancelable: true },   // Android에서 창 바깥을 눌러도 닫히게 한다
     );
   };
 
@@ -125,7 +127,7 @@ function SettingsModal({
           router.replace("/(auth)/login");
         },
       },
-    ]);
+    ], { cancelable: true });   // Android에서 창 바깥을 눌러도 닫히게 한다
   };
 
   return (
@@ -144,8 +146,9 @@ function SettingsModal({
               i < THEME_ORDER.length - 1 && { borderColor: colors.separator },
             ]}
             onPress={() => setMode(m)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: mode === m }}
           >
-            <Text style={settingStyles.segmentIcon}>{THEME_ICON[m]}</Text>
             <Text style={[settingStyles.segmentLabel, { color: mode === m ? "#fff" : colors.subtext }]}>
               {THEME_LABEL[m]}
             </Text>
@@ -339,17 +342,26 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
 // ── 가계부 요약 카드 ──────────────────────────────────────────
 
 // 수입 총액·지출 총액을 보여주고, 제목('9월 가계부 ▾')을 누르면 연·월을 골라 다른 달을 본다
+// 홈 카드에 보여 줄 오늘 내역 최대 줄 수 — 넘치면 "외 N건"으로 줄이고 가계부 탭에서 보게 한다
+const TODAY_TX_LIMIT = 4;
+
 function BudgetSummaryCard({
-  year, month, income, expense, onPickMonth, colors,
+  year, month, income, expense, todayTransactions, onPickMonth, colors,
 }: {
   year: number; month: number;
   income: number; expense: number;
+  /** 오늘 수입·지출 — 카드에서 다른 달을 보고 있어도 항상 오늘 것 */
+  todayTransactions: Transaction[];
   onPickMonth: (year: number, month: number) => void;
   colors: typeof Colors.light;
 }) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
+
+  const todayIncome = todayTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const todayExpense = todayTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const shownToday = todayTransactions.slice(0, TODAY_TX_LIMIT);
 
   // '자세히' → 가계부 탭. 가계부 탭은 홈 카드와 같은 달을 보므로 지금 고른 달의 내역이 바로 나온다
   const openDetail = () => router.push("/(tabs)/budget");
@@ -391,6 +403,40 @@ function BudgetSummaryCard({
           <Text style={[styles.budgetCaption, { color: colors.subtext }]}>지출 총액</Text>
           <Text style={[styles.budgetValue, { color: colors.expense }]}>{formatAmount(expense)}</Text>
         </View>
+      </View>
+
+      {/* 오늘 수입·지출 (피드백 3번) — 가계부 탭에 들어가지 않아도 오늘 쓴 내역을 바로 본다 */}
+      <View style={[styles.todayTx, { borderTopColor: colors.separator }]}>
+        <View style={styles.todayTxHead}>
+          <Text style={[styles.todayTxTitle, { color: colors.subtext }]}>오늘 내역</Text>
+          <View style={styles.todayTxSums}>
+            {todayIncome > 0 && <Text style={[styles.todayTxSum, { color: colors.income }]}>+{formatAmount(todayIncome)}</Text>}
+            {todayExpense > 0 && <Text style={[styles.todayTxSum, { color: colors.expense }]}>-{formatAmount(todayExpense)}</Text>}
+          </View>
+        </View>
+        {todayTransactions.length === 0 ? (
+          <Text style={[styles.todayTxEmpty, { color: colors.subtext }]}>오늘 기록한 수입·지출이 없어요</Text>
+        ) : (
+          <>
+            {shownToday.map((t) => {
+              const isIncome = t.type === "income";
+              return (
+                <View key={t.id} style={styles.todayTxRow}>
+                  <Text style={[styles.todayTxCategory, { color: colors.subtext }]} numberOfLines={1}>{t.category}</Text>
+                  <Text style={[styles.todayTxNote, { color: colors.text }]} numberOfLines={1}>{t.note || t.category}</Text>
+                  <Text style={[styles.todayTxAmount, { color: isIncome ? colors.income : colors.expense }]}>
+                    {isIncome ? "+" : "-"}{formatAmount(t.amount)}
+                  </Text>
+                </View>
+              );
+            })}
+            {todayTransactions.length > shownToday.length && (
+              <Text style={[styles.todayTxMore, { color: colors.subtext }]}>
+                외 {todayTransactions.length - shownToday.length}건 · 자세히에서 모두 보기
+              </Text>
+            )}
+          </>
+        )}
       </View>
 
       <DateJumpSheet
@@ -537,7 +583,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   // 홈은 항상 "이번 달·오늘" 기준 — 일정 탭에서 다른 달로 넘겨도 영향받지 않는 전용 값을 쓴다
-  const { homeYear, homeMonth, homeIncome, homeExpense, loadHomeMonth } = useBudgetStore();
+  const { homeYear, homeMonth, homeIncome, homeExpense, todayTransactions, loadHomeMonth, loadTodayTransactions } = useBudgetStore();
   const { todaySchedules, loadToday } = useScheduleStore();
   const { load: loadTodos } = useTodoStore();
 
@@ -548,6 +594,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const now = new Date();
     loadHomeMonth(now.getFullYear(), now.getMonth() + 1);
+    loadTodayTransactions();
     loadToday();
     loadTodos();
 
@@ -563,6 +610,8 @@ export default function HomeScreen() {
           // 날짜가 바뀌면(특히 새 달이 되면) 가계부 카드를 이번 달로 되돌린다
           const d = new Date();
           loadHomeMonth(d.getFullYear(), d.getMonth() + 1);
+          // 자정이 지나면 '오늘 내역'도 새 날짜 기준으로 다시 읽는다
+          loadTodayTransactions();
           loadToday();
           lastActiveDateRef.current = currentDate;
         }
@@ -570,7 +619,7 @@ export default function HomeScreen() {
     });
     return () => sub.remove();
     // Zustand store 액션은 안정적 참조 — 의존성에 포함해도 무한 루프 없음
-  }, [loadHomeMonth, loadToday, loadTodos]);
+  }, [loadHomeMonth, loadToday, loadTodayTransactions, loadTodos]);
 
   const today = todayString();
 
@@ -630,6 +679,7 @@ export default function HomeScreen() {
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>가계부</Text>
       <BudgetSummaryCard
         year={homeYear} month={homeMonth} income={homeIncome} expense={homeExpense} colors={colors}
+        todayTransactions={todayTransactions}
         onPickMonth={loadHomeMonth}
       />
 
@@ -696,6 +746,18 @@ const styles = StyleSheet.create({
   budgetDivider: { width: 1, height: 32 },
   budgetCaption: { fontSize: 11 },
   budgetValue: { fontSize: 14, fontWeight: "700" },
+  // 오늘 내역 — 월 합계 아래에 가는 선으로 나눠 붙인다
+  todayTx: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, gap: 8 },
+  todayTxHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  todayTxTitle: { fontSize: 12, fontWeight: "600" },
+  todayTxSums: { flexDirection: "row", gap: 8 },
+  todayTxSum: { fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  todayTxEmpty: { fontSize: 13 },
+  todayTxRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  todayTxCategory: { fontSize: 12, width: 44 },
+  todayTxNote: { flex: 1, fontSize: 14 },
+  todayTxAmount: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  todayTxMore: { fontSize: 12 },
   // ── 일정 ──────────────────────────────────────────────────
   scheduleItem: { flexDirection: "row", alignItems: "center", gap: 10 },
   scheduleDot: { width: 7, height: 7, borderRadius: 4 },
@@ -743,7 +805,6 @@ const settingStyles = StyleSheet.create({
   // 시작 화면 선택은 아이콘 없이 글자만 — 높이를 줄인다
   segmentCompact: { paddingVertical: 10 },
   hint: { fontSize: 11, marginLeft: 4, marginTop: -2 },
-  segmentIcon: { fontSize: 18 },
   segmentLabel: { fontSize: 12, fontWeight: "500" },
   // 글자 크기 미리보기
   preview: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 4 },

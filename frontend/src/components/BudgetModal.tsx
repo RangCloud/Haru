@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
+import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text, TextInput } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { DateField } from "@/src/components/DateTimeFields";
@@ -40,22 +41,25 @@ export function TransactionRow({ item, colors, onDelete, onEdit }: {
 }) {
   const isIncome = item.type === "income";
   const tone = isIncome ? colors.income : colors.expense;
+  // 길게 눌렀을 때 뜨는 수정·삭제 창 — Android에서도 취소할 수 있도록 시스템 알림창 대신 쓴다
+  const [menuVisible, setMenuVisible] = useState(false);
   return (
     <TouchableOpacity
       style={[styles.txRow, { borderBottomColor: colors.separator }]}
-      onLongPress={() =>
-        Alert.alert(
-          "거래 관리",
-          `${item.category}  ${isIncome ? "+" : "-"}${formatAmount(item.amount)}`,
-          [
-            { text: "수정", onPress: onEdit },
-            { text: "삭제", style: "destructive", onPress: onDelete },
-            { text: "취소", style: "cancel" },
-          ],
-        )
-      }
+      onLongPress={() => setMenuVisible(true)}
       activeOpacity={0.7}
     >
+      <ActionSheet
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        title="거래 관리"
+        message={`${item.category}  ${isIncome ? "+" : "-"}${formatAmount(item.amount)}`}
+        actions={[
+          { label: "수정", onPress: onEdit },
+          { label: "삭제", onPress: onDelete, destructive: true },
+        ]}
+        colors={colors}
+      />
       <View style={[styles.txBadge, { backgroundColor: withAlpha(tone, "1F") }]}>
         <Text style={[styles.txBadgeText, { color: tone }]}>{isIncome ? "수입" : "지출"} · {item.category}</Text>
       </View>

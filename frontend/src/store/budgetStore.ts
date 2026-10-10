@@ -12,11 +12,13 @@ import { create } from "zustand";
 import {
   addTransaction,
   deleteTransaction,
+  getTransactionsBetween,
   getTransactionsByMonth,
   updateTransaction,
   type NewTransaction,
   type Transaction,
 } from "@/src/db/budget";
+import { todayString } from "@/src/utils/date";
 
 // ── 상태 타입 ──────────────────────────────────────────────────
 
@@ -39,9 +41,14 @@ interface BudgetState {
   homeExpense: number;
   homeTransactions: Transaction[];   // 그 달의 거래 (가계부 탭 목록용, 최신 날짜순)
 
+  // 홈 화면 '오늘 수입·지출' — 홈 카드에서 다른 달을 보고 있어도 항상 오늘 내역을 보여 주기 위해 따로 둔다
+  todayTransactions: Transaction[];
+
   // 액션
   loadMonth: (year: number, month: number) => Promise<void>;
   loadHomeMonth: (year: number, month: number) => Promise<void>;
+  /** 오늘 거래를 다시 읽는다 (홈 진입 시, 자정이 지나 날짜가 바뀌었을 때) */
+  loadTodayTransactions: () => Promise<void>;
   add: (t: NewTransaction) => Promise<void>;
   update: (id: number, t: Partial<NewTransaction>) => Promise<void>;
   remove: (id: number) => Promise<void>;
@@ -74,11 +81,13 @@ export const useBudgetStore = create<BudgetState>((set, get) => {
   /** 추가·수정·삭제 후 일정 탭이 보는 달과 홈 카드가 보는 달을 함께 갱신한다 */
   const refresh = async () => {
     const { year, month, homeYear, homeMonth } = get();
-    const [transactions, summary] = await Promise.all([
+    const today = todayString();
+    const [transactions, summary, todayTransactions] = await Promise.all([
       getTransactionsByMonth(year, month),
       monthSummary(homeYear, homeMonth),
+      getTransactionsBetween(today, today),
     ]);
-    set({ transactions, ...calcSummary(transactions), ...summary });
+    set({ transactions, ...calcSummary(transactions), ...summary, todayTransactions });
   };
 
   return {
@@ -94,6 +103,7 @@ export const useBudgetStore = create<BudgetState>((set, get) => {
     homeIncome: 0,
     homeExpense: 0,
     homeTransactions: [],
+    todayTransactions: [],
 
     /** 특정 연월 데이터를 DB에서 불러와 상태를 교체한다 (일정 탭 달력용) */
     loadMonth: async (year, month) => {
@@ -108,6 +118,11 @@ export const useBudgetStore = create<BudgetState>((set, get) => {
       const summary = await monthSummary(year, month);
       const cur = get();
       if (cur.homeYear === year && cur.homeMonth === month) set(summary);
+    },
+
+    loadTodayTransactions: async () => {
+      const today = todayString();
+      set({ todayTransactions: await getTransactionsBetween(today, today) });
     },
 
     add: async (t) => {

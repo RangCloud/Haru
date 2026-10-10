@@ -1,16 +1,12 @@
 /**
  * 커스텀 useColorScheme
  *
- * useThemeStore의 모드 설정을 우선 적용하고,
- * 'system' 모드일 때만 기기 시스템 설정을 따른다.
- * 항상 'light' | 'dark'를 반환 (null/undefined 없음).
+ * 설정에서 고른 테마(라이트/다크)를 그대로 돌려준다.
+ * '시스템' 모드는 없앴으므로 기기 설정을 따로 보지 않는다 — 첫 실행 때의 출발값만 themeStore가 기기 설정에서 가져온다.
  */
 
-import { useColorScheme as useSystemColorScheme } from "react-native";
 import { useThemeStore } from "@/src/store/themeStore";
 
 export function useColorScheme(): "light" | "dark" {
-  const system = useSystemColorScheme() ?? "light";
-  const { mode } = useThemeStore();
-  return mode === "system" ? system : mode;
+  return useThemeStore((s) => s.mode);
 }
