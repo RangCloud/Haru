@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { CalendarImportSheet } from "@/src/components/CalendarImportSheet";
@@ -90,44 +91,26 @@ function SettingsModal({
     countImportedSchedules().then(setImportedCount).catch(() => setImportedCount(0));
   }, [visible, importVisible]);
 
-  const handleClearImported = () => {
-    Alert.alert(
-      "가져온 일정 지우기",
-      `캘린더에서 가져온 일정 ${importedCount}개를 모두 지울까요?
+  // 확인 창 — 시스템 알림창 대신 선택 창을 써서 iPhone·Android 모두 바깥을 눌러 닫을 수 있게 한다
+  const [confirm, setConfirm] = useState<"clear" | "logout" | null>(null);
+  const handleClearImported = () => setConfirm("clear");
+  const handleSignOut = () => setConfirm("logout");
 
-하루에서 직접 만든 일정과 폰의 캘린더 원본은 그대로 남아요. 가져온 뒤 하루에서 고친 내용은 함께 지워져요.`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "지우기", style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteImportedSchedules();
-              // 달력과 홈의 오늘 일정에서 바로 사라지도록 목록을 새로 읽는다
-              await reloadSchedules();
-              setImportedCount(0);
-            } catch {
-              Alert.alert("오류", "일정을 지우지 못했어요. 잠시 후 다시 시도해 주세요.");
-            }
-          },
-        },
-      ],
-      { cancelable: true },   // Android에서 창 바깥을 눌러도 닫히게 한다
-    );
+  const clearImported = async () => {
+    try {
+      await deleteImportedSchedules();
+      // 달력과 홈의 오늘 일정에서 바로 사라지도록 목록을 새로 읽는다
+      await reloadSchedules();
+      setImportedCount(0);
+    } catch {
+      Alert.alert("오류", "일정을 지우지 못했어요. 잠시 후 다시 시도해 주세요.");
+    }
   };
 
-  const handleSignOut = () => {
-    Alert.alert("로그아웃", "로그아웃할까요?", [
-      { text: "취소", style: "cancel" },
-      {
-        text: "로그아웃", style: "destructive",
-        onPress: async () => {
-          onClose();
-          await signOut();
-          router.replace("/(auth)/login");
-        },
-      },
-    ], { cancelable: true });   // Android에서 창 바깥을 눌러도 닫히게 한다
+  const logout = async () => {
+    onClose();
+    await signOut();
+    router.replace("/(auth)/login");
   };
 
   return (
@@ -277,6 +260,24 @@ function SettingsModal({
       >
         <Text style={[settingStyles.logoutText, { color: colors.expense }]}>로그아웃</Text>
       </TouchableOpacity>
+
+      {/* 확인 창 — 설정 창 안쪽에 둬야 iOS에서 설정 창 위에 겹쳐 뜬다 */}
+      <ActionSheet
+        visible={confirm === "clear"}
+        onClose={() => setConfirm(null)}
+        title="가져온 일정 지우기"
+        message={`캘린더에서 가져온 일정 ${importedCount}개를 모두 지울까요?\n\n하루에서 직접 만든 일정과 폰의 캘린더 원본은 그대로 남아요. 가져온 뒤 하루에서 고친 내용은 함께 지워져요.`}
+        actions={[{ label: "모두 지우기", onPress: clearImported, destructive: true }]}
+        colors={colors}
+      />
+      <ActionSheet
+        visible={confirm === "logout"}
+        onClose={() => setConfirm(null)}
+        title="로그아웃"
+        message="로그아웃할까요?"
+        actions={[{ label: "로그아웃", onPress: logout, destructive: true }]}
+        colors={colors}
+      />
     </BottomSheet>
   );
 }

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ActionSheet } from "@/src/components/ActionSheet";
 import { Text, TextInput } from "@/src/components/AppText";
 import { HourMinuteInput } from "@/src/components/TimeField";
 import { type BirthInfo, useFortuneStore } from "@/src/store/fortuneStore";
@@ -251,18 +252,19 @@ export default function FortuneScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleReset = () => {
-    Alert.alert(
-      "생년월일 초기화",
-      "생년월일을 다시 설정하면 기존 운세가 초기화됩니다.\n계속할까요?",
-      [
-        { text: "취소", style: "cancel" },
-        { text: "초기화", style: "destructive", onPress: clearBirthInfo },
-      ],
-      // Android에서 창 바깥을 눌러도 닫히게 한다 (iOS는 취소 버튼으로 닫는다)
-      { cancelable: true },
-    );
-  };
+  // 생년월일 초기화 확인 창 — iPhone·Android 모두 바깥을 눌러 닫을 수 있도록 선택 창을 쓴다
+  const [resetVisible, setResetVisible] = useState(false);
+  const handleReset = () => setResetVisible(true);
+  const resetSheet = (
+    <ActionSheet
+      visible={resetVisible}
+      onClose={() => setResetVisible(false)}
+      title="생년월일 초기화"
+      message="생년월일을 다시 설정하면 기존 운세가 초기화됩니다. 계속할까요?"
+      actions={[{ label: "초기화", onPress: clearBirthInfo, destructive: true }]}
+      colors={colors}
+    />
+  );
 
   // 생년월일 미설정 → 입력 폼
   if (!birthInfo) {
@@ -294,6 +296,7 @@ export default function FortuneScreen() {
         <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
           <Text style={[styles.resetBtnText, { color: colors.subtext }]}>생년월일 다시 설정</Text>
         </TouchableOpacity>
+        {resetSheet}
       </View>
     );
   }
@@ -301,13 +304,16 @@ export default function FortuneScreen() {
   // 운세 표시
   if (todayFortune) {
     return (
-      <FortuneCard
-        content={todayFortune.content}
-        date={todayFortune.date}
-        birthInfo={birthInfo}
-        colors={colors}
-        onReset={handleReset}
-      />
+      <>
+        <FortuneCard
+          content={todayFortune.content}
+          date={todayFortune.date}
+          birthInfo={birthInfo}
+          colors={colors}
+          onReset={handleReset}
+        />
+        {resetSheet}
+      </>
     );
   }
 

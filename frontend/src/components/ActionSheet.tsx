@@ -8,6 +8,9 @@
  * 잘려 나가고, 바깥을 눌러도 닫히지 않아 "무엇이든 하나를 골라야만 창이 닫히는" 문제가 있었다.
  * 이 창은 두 플랫폼에서 똑같이 ① 맨 아래 '취소' ② 오른쪽 위 ✕ ③ 바깥 영역 누르기
  * ④ Android 뒤로 가기 버튼으로 닫을 수 있다.
+ *
+ * "로그아웃할까요?" 같은 확인 창에도 쓴다 (동작 하나 + 취소).
+ * iPhone의 시스템 확인 창은 바깥을 눌러 닫는 기능이 아예 없어서, 바깥 누르기로 닫히게 하려면 이 창을 써야 한다.
  */
 
 import { StyleSheet, TouchableOpacity, View } from "react-native";
@@ -59,7 +62,7 @@ export function ActionSheet({ visible, onClose, title, message, actions, colors 
         </TouchableOpacity>
       }
     >
-      {message ? <Text style={[styles.message, { color: colors.subtext }]} numberOfLines={2}>{message}</Text> : null}
+      {message ? <Text style={[styles.message, { color: colors.subtext }]}>{message}</Text> : null}
       <View style={[styles.group, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         {actions.map((action, i) => (
           <TouchableOpacity

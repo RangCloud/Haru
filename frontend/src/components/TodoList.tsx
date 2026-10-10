@@ -10,7 +10,7 @@
  */
 
 import { useState } from "react";
-import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
@@ -52,6 +52,8 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
   // 길게 눌렀을 때 뜨는 창에 넣을 동작들 — 시스템 알림창 대신 선택 창을 써서 Android에서도 취소할 수 있다
   const [menuRow, setMenuRow] = useState<Row | null>(null);
   const openMenu = (row: Row) => setMenuRow(row);
+  // 루틴 삭제 확인 창에 띄울 루틴 — iPhone에서도 바깥을 눌러 닫을 수 있도록 시스템 알림창 대신 선택 창을 쓴다
+  const [routineToDelete, setRoutineToDelete] = useState<RoutineForDate | null>(null);
 
   const menuActions = (row: Row) => {
     const importantLabel = row.important ? "중요 표시 해제" : "★ 중요 표시";
@@ -69,17 +71,8 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
       { label: importantLabel, onPress: () => setRoutineImportant(routine.id, !row.important) },
       {
         label: "루틴 삭제", destructive: true,
-        // 지난 체크 기록까지 지워지므로 한 번 더 확인한다. cancelable: Android에서 바깥을 눌러도 닫히게 한다
-        onPress: () =>
-          Alert.alert(
-            "루틴 삭제",
-            `"${routine.title}" 루틴을 삭제할까요?\n지난 체크 기록도 함께 지워집니다.`,
-            [
-              { text: "취소", style: "cancel" },
-              { text: "삭제", style: "destructive", onPress: () => removeRoutine(routine.id) },
-            ],
-            { cancelable: true },
-          ),
+        // 지난 체크 기록까지 지워지므로 한 번 더 확인한다 (아래의 확인 창)
+        onPress: () => setRoutineToDelete(routine),
       },
     ];
   };
@@ -138,6 +131,14 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
         title={menuRow?.item.title ?? ""}
         message={menuRow?.kind === "routine" ? `고정 루틴 · ${describeWeekdays(menuRow.item.weekdays)}` : undefined}
         actions={menuRow ? menuActions(menuRow) : []}
+        colors={colors}
+      />
+      <ActionSheet
+        visible={routineToDelete !== null}
+        onClose={() => setRoutineToDelete(null)}
+        title="루틴 삭제"
+        message={routineToDelete ? `"${routineToDelete.title}" 루틴을 삭제할까요? 지난 체크 기록도 함께 지워집니다.` : undefined}
+        actions={routineToDelete ? [{ label: "삭제", onPress: () => removeRoutine(routineToDelete.id), destructive: true }] : []}
         colors={colors}
       />
     </View>
