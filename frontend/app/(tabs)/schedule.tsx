@@ -555,6 +555,16 @@ export default function ScheduleScreen() {
               >
                 <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
               </TouchableOpacity>
+              {/* 달력을 아래로 내려 목록을 보는 중에도 바로 추가할 수 있게, 고정되는 날짜 바에도 추가 버튼을 둔다.
+                  맨 위 월 제목 줄의 + 추가와 같은 동작이다 (선택한 날짜에 일정·지출·수입 추가) */}
+              <TouchableOpacity
+                onPress={handleFabPress}
+                style={[styles.barAddBtn, { backgroundColor: colors.tint }]}
+                accessibilityRole="button"
+                accessibilityLabel="이 날짜에 일정 또는 가계부 추가"
+              >
+                <Text style={styles.addBtnText}>+ 추가</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -712,6 +722,8 @@ const styles = StyleSheet.create({
   selectedDateText: { flexShrink: 1, fontSize: 15, fontWeight: "600", marginRight: 8 },
   barActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   detailBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  // 날짜 바의 추가 버튼 — 한눈에 보기 버튼과 같은 크기
+  barAddBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
   // 월 제목 줄 오른쪽 끝 — 오늘 버튼(왼쪽)과 같은 높이에 맞춘다
   addBtn: { position: "absolute", right: 20, bottom: 20, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
   addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },

@@ -1,11 +1,24 @@
 /**
  * 뉴스 탭 — 카테고리별 뉴스 (피드백 19번: 카테고리 필터 + 새로고침)
  * 목록을 좌우로 밀면 이전·다음 카테고리로 넘어간다 (칩 순서대로, 달력과 같은 미끄러지는 전환).
+ * 새로고침은 세 가지: 맨 위에서 아래로 당기기, 맨 아래에서 더 끌어올리기, ↻ 버튼.
  * 외부 API는 반드시 백엔드(/api/news)를 경유한다.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  type GestureResponderEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -75,6 +88,11 @@ function NewsCard({ item, colors, onPress }: { item: NewsItem; colors: typeof Co
 
 // ── 메인 화면 ─────────────────────────────────────────────────
 
+// 맨 아래에서 손가락을 이만큼 더 끌어올렸다 놓으면 새로고침한다 (살짝 건드린 것과 구분하기 위한 거리)
+const BOTTOM_PULL_DISTANCE = 70;
+// 목록 끝에서 이 정도 안쪽까지는 "맨 아래"로 본다 (소수점 오차 흡수)
+const BOTTOM_TOLERANCE = 4;
+
 type CategoryState = { items: NewsItem[]; error: string | null; fetchedAt: number };
 
 export default function NewsScreen() {
@@ -90,6 +108,8 @@ export default function NewsScreen() {
   const [byCategory, setByCategory] = useState<Partial<Record<NewsCategory, CategoryState>>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // 맨 아래에서 끌어올려 새로고침하는 중 — 목록 아래쪽에 진행 표시를 띄운다
+  const [bottomRefreshing, setBottomRefreshing] = useState(false);
   // 칩을 빠르게 바꿨을 때 늦게 도착한 이전 요청이 현재 목록을 덮어쓰지 않게 요청 번호로 구분한다
   const requestIdRef = useRef(0);
 
@@ -106,6 +126,7 @@ export default function NewsScreen() {
       if (requestId === requestIdRef.current) {
         setLoading(false);
         setRefreshing(false);
+        setBottomRefreshing(false);
       }
     }
   }, []);
@@ -122,6 +143,41 @@ export default function NewsScreen() {
   }, [category]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); load(category); }, [category, load]);
+
+  // ── 맨 아래에서 더 끌어올리면 새로고침 ──
+  // 위에서 당기는 새로고침(RefreshControl)은 목록 맨 위에서만 동작한다. 뉴스를 끝까지 읽은 뒤에는
+  // 다시 맨 위로 올라가야 해서, 맨 아래에서도 같은 손동작으로 새로 불러올 수 있게 한다.
+  // Android는 목록 끝에서 더 스크롤되지 않아 스크롤 위치만으로는 "더 당김"을 알 수 없다.
+  // 그래서 두 플랫폼 공통으로 "맨 아래에서 시작한 손가락이 위로 얼마나 움직였는가"로 판정한다.
+  const scrollPos = useRef({ offsetY: 0, layoutHeight: 0, contentHeight: 0 });
+  const pullStart = useRef<{ x: number; y: number; atBottom: boolean } | null>(null);
+
+  // 내용이 화면보다 짧아 스크롤이 없는 경우도 "맨 아래"로 친다
+  const isAtBottom = () => {
+    const { offsetY, layoutHeight, contentHeight } = scrollPos.current;
+    return layoutHeight > 0 && offsetY + layoutHeight >= contentHeight - BOTTOM_TOLERANCE;
+  };
+
+  const onListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollPos.current.offsetY = e.nativeEvent.contentOffset.y;
+  };
+
+  const onListTouchStart = (e: GestureResponderEvent) => {
+    pullStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, atBottom: isAtBottom() };
+  };
+
+  const onListTouchEnd = (e: GestureResponderEvent) => {
+    const start = pullStart.current;
+    pullStart.current = null;
+    if (!start || !start.atBottom || loading) return;
+    const up = start.y - e.nativeEvent.pageY;             // 양수 = 손가락을 위로 끌어올림
+    const sideways = Math.abs(e.nativeEvent.pageX - start.x);
+    // 좌우로 미는 카테고리 넘기기와 헷갈리지 않도록, 세로 움직임이 가로보다 뚜렷이 클 때만 인정한다
+    if (up >= BOTTOM_PULL_DISTANCE && up > sideways * 1.5) {
+      setBottomRefreshing(true);
+      load(category);
+    }
+  };
 
   const current = byCategory[category];
   const showSpinner = !current && loading;
@@ -213,6 +269,12 @@ export default function NewsScreen() {
         contentContainerStyle={styles.container}
         scrollEnabled={!swiping}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
+        onScroll={onListScroll}
+        scrollEventThrottle={32}
+        onLayout={(e) => { scrollPos.current.layoutHeight = e.nativeEvent.layout.height; }}
+        onContentSizeChange={(_, height) => { scrollPos.current.contentHeight = height; }}
+        onTouchStart={onListTouchStart}
+        onTouchEnd={onListTouchEnd}
       >
         <Animated.View style={[styles.slide, slideStyle]}>
         {showSpinner ? (
@@ -239,9 +301,15 @@ export default function NewsScreen() {
         )}
         {current?.fetchedAt ? (
           <Text style={[styles.updatedAt, { color: colors.subtext }]}>
-            {formatUpdatedAt(current.fetchedAt)} 업데이트 · 아래로 당기거나 ↻ 버튼으로 새로고침
+            {formatUpdatedAt(current.fetchedAt)} 업데이트 · 맨 위·맨 아래에서 당기거나 ↻ 버튼으로 새로고침
           </Text>
         ) : null}
+        {bottomRefreshing && (
+          <View style={styles.bottomRefresh}>
+            <ActivityIndicator size="small" color={colors.tint} />
+            <Text style={[styles.updatedAt, styles.bottomRefreshText, { color: colors.subtext }]}>새 뉴스를 불러오는 중…</Text>
+          </View>
+        )}
         {visibleCategories.length > 1 && (
           <Text style={[styles.updatedAt, { color: colors.subtext }]}>좌우로 밀면 다른 카테고리로 넘어가요</Text>
         )}
@@ -279,6 +347,8 @@ const styles = StyleSheet.create({
   slide: { gap: 8 },
   screenTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5 },
   updatedAt: { fontSize: 11, textAlign: "center", marginTop: 4 },
+  bottomRefresh: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 8 },
+  bottomRefreshText: { marginTop: 0 },
   // ── 뉴스 ──────────────────────────────────────────────────
   newsList: {
     borderRadius: 16,
