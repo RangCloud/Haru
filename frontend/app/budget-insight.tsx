@@ -21,7 +21,8 @@ import { Text } from "@/src/components/AppText";
 import { formatAmount } from "@/src/components/BudgetModal";
 import { getTransactionsBetween, type Transaction } from "@/src/db/budget";
 import { useBudgetStore } from "@/src/store/budgetStore";
-import { toDateStr, todayString } from "@/src/utils/date";
+import { useSettingsStore } from "@/src/store/settingsStore";
+import { todayString } from "@/src/utils/date";
 import { buildInsight, getPeriod, shiftAnchor, type PeriodUnit } from "@/src/utils/spendingInsight";
 
 const UNITS: { value: PeriodUnit; label: string }[] = [
@@ -36,19 +37,19 @@ const BAR_COLORS = ["#EF4444", "#EC4899", "#F59E0B", "#3B82F6", "#10B981", "#8B5
 export default function BudgetInsightScreen() {
   const colors = Colors[useColorScheme() ?? "light"];
   const insets = useSafeAreaInsets();
-  const { homeYear, homeMonth } = useBudgetStore();
+  const { homeRange } = useBudgetStore();
+  // 달 단위는 가계부의 '한 달 시작일'을 따른다 (홈·가계부 탭과 같은 기간이 나오게)
+  const monthStartDay = useSettingsStore((s) => s.monthStartDay);
 
   const today = todayString();
   const [unit, setUnit] = useState<PeriodUnit>("month");
-  // 기준 날짜 — 처음에는 가계부 탭에서 보고 있던 달. 그 달이 이번 달이면 오늘을 기준으로 삼아
-  // '주'로 바꿨을 때 이번 주가 나오게 한다.
-  const [anchor, setAnchor] = useState(() => {
-    const now = new Date();
-    const isCurrent = homeYear === now.getFullYear() && homeMonth === now.getMonth() + 1;
-    return isCurrent ? today : toDateStr(homeYear, homeMonth, 1);
-  });
+  // 기준 날짜 — 처음에는 가계부 탭에서 보고 있던 기간. 그 기간에 오늘이 들어 있으면 오늘을 기준으로 삼아
+  // '주'로 바꿨을 때 이번 주가 나오게 하고, 아니면 그 기간의 첫날을 기준으로 삼는다.
+  const [anchor, setAnchor] = useState(() =>
+    today >= homeRange.start && today <= homeRange.end ? today : homeRange.start,
+  );
 
-  const period = useMemo(() => getPeriod(unit, anchor, today), [unit, anchor, today]);
+  const period = useMemo(() => getPeriod(unit, anchor, today, monthStartDay), [unit, anchor, today, monthStartDay]);
 
   const [data, setData] = useState<{ current: Transaction[]; previous: Transaction[] } | null>(null);
   useEffect(() => {
@@ -111,7 +112,7 @@ export default function BudgetInsightScreen() {
         {/* 기간 이동 */}
         <View style={styles.periodRow}>
           <TouchableOpacity
-            onPress={() => setAnchor(shiftAnchor(unit, anchor, -1))}
+            onPress={() => setAnchor(shiftAnchor(unit, anchor, -1, monthStartDay))}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="이전 기간"
           >
@@ -119,7 +120,7 @@ export default function BudgetInsightScreen() {
           </TouchableOpacity>
           <Text style={[styles.periodLabel, { color: colors.text }]}>{period.label}</Text>
           <TouchableOpacity
-            onPress={() => setAnchor(shiftAnchor(unit, anchor, 1))}
+            onPress={() => setAnchor(shiftAnchor(unit, anchor, 1, monthStartDay))}
             disabled={!canGoNext}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="다음 기간"

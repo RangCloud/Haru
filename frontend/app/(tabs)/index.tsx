@@ -22,7 +22,7 @@ import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
 import { CalendarImportSheet } from "@/src/components/CalendarImportSheet";
 import { ConfirmDialog } from "@/src/components/ConfirmDialog";
-import { DateJumpSheet } from "@/src/components/DateJumpSheet";
+import { BudgetPeriodSheet } from "@/src/components/BudgetPeriodSheet";
 import { TodoAddSheet, type TodoEditTarget } from "@/src/components/TodoAddSheet";
 import { TodoList } from "@/src/components/TodoList";
 import { countImportedSchedules, deleteImportedSchedules, type ScheduleItem } from "@/src/db/schedule";
@@ -34,6 +34,7 @@ import { FONT_SIZE_OPTIONS, START_TAB_OPTIONS, useSettingsStore } from "@/src/st
 import { useThemeStore, type ThemeMode } from "@/src/store/themeStore";
 import { useTodoStore } from "@/src/store/todoStore";
 import { useWeatherStore } from "@/src/store/weatherStore";
+import { formatRange, formatStartDay, periodOfDate, rangeDays, type DateRange } from "@/src/utils/budgetPeriod";
 import { requestNotificationPermission } from "@/src/utils/notifications";
 import { isPastOn, timeLabelOn } from "@/src/utils/scheduleText";
 import { writeWidgetData } from "@/src/utils/widgetData";
@@ -346,23 +347,35 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
 
 // ── 가계부 요약 카드 ──────────────────────────────────────────
 
-// 수입 총액·지출 총액을 보여주고, 제목('9월 가계부 ▾')을 누르면 연·월을 골라 다른 달을 본다
+// 수입 총액·지출 총액을 보여주고, 제목('9월 가계부 ▾')을 누르면 기간 선택 창(월 단위·한 달 시작일·직접 선택)이 열린다
 // 홈 카드에 보여 줄 오늘 내역 최대 줄 수 — 넘치면 "외 N건"으로 줄이고 가계부 탭에서 보게 한다
 const TODAY_TX_LIMIT = 4;
 
 function BudgetSummaryCard({
-  year, month, income, expense, todayTransactions, onPickMonth, colors,
+  year, month, range, custom, monthStartDay, income, expense, todayTransactions, onResetPeriod, colors,
 }: {
   year: number; month: number;
+  /** 실제로 보고 있는 날짜 범위 — 한 달 시작일이 1일이 아니거나 직접 고른 기간일 때 제목 아래에 보여 준다 */
+  range: DateRange;
+  /** 기간 직접 선택으로 고른 일회성 기간인지 */
+  custom: boolean;
+  monthStartDay: number;
   income: number; expense: number;
   /** 오늘 수입·지출 — 카드에서 다른 달을 보고 있어도 항상 오늘 것 */
   todayTransactions: Transaction[];
-  onPickMonth: (year: number, month: number) => void;
+  /** '이번 달로' — 직접 고른 기간에서 오늘이 든 한 달로 돌아간다 */
+  onResetPeriod: () => void;
   colors: typeof Colors.light;
 }) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const now = new Date();
-  const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1;
+  // '이번 달' 표시는 달력의 달이 아니라 오늘이 들어 있는 기간 기준 (시작일 25일이면 10/15는 '9월')
+  const current = periodOfDate(todayString(), monthStartDay);
+  const isCurrent = !custom && year === current.year && month === current.month;
+  // 제목 아래 실제 날짜 — 1일 시작 한 달은 제목만으로 충분하므로 생략한다
+  const subtitle = custom
+    ? `직접 고른 기간 · ${rangeDays(range)}일`
+    : monthStartDay !== 1 ? `${formatRange(range)} · ${formatStartDay(monthStartDay)} 시작` : null;
 
   const todayIncome = todayTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const todayExpense = todayTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -379,24 +392,36 @@ function BudgetSummaryCard({
     >
       <View style={styles.cardHeader}>
         <View style={styles.monthNav}>
-          {/* 일정 탭 상단처럼 제목을 누르면 연·월 선택 창 */}
+          {/* 일정 탭 상단처럼 제목을 누르면 기간 선택 창 */}
           <TouchableOpacity
             onPress={() => setPickerVisible(true)}
             hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-            accessibilityLabel={`${year}년 ${month}월 가계부, 눌러서 다른 달 선택`}
+            accessibilityLabel={custom
+              ? `${formatRange(range)} 가계부, 눌러서 다른 기간 선택`
+              : `${year}년 ${month}월 가계부, 눌러서 다른 기간 선택`}
           >
-            <Text style={[styles.cardLabel, { color: colors.text }]}>
-              {year === now.getFullYear() ? "" : `${year}년 `}{month}월 가계부{" "}
-              <Text style={[styles.monthCaret, { color: colors.subtext }]}>▾</Text>
-            </Text>
-          </TouchableOpacity>
-          {isCurrent && (
-            <View style={[styles.thisMonthPill, { backgroundColor: colors.tintLight }]}>
-              <Text style={[styles.thisMonthText, { color: colors.tint }]}>이번 달</Text>
+            <View style={styles.monthTitleRow}>
+              <Text style={[styles.cardLabel, { color: colors.text }]}>
+                {custom ? formatRange(range) : `${year === now.getFullYear() ? "" : `${year}년 `}${month}월 가계부`}{" "}
+                <Text style={[styles.monthCaret, { color: colors.subtext }]}>▾</Text>
+              </Text>
+              {isCurrent && (
+                <View style={[styles.thisMonthPill, { backgroundColor: colors.tintLight }]}>
+                  <Text style={[styles.thisMonthText, { color: colors.tint }]}>이번 달</Text>
+                </View>
+              )}
             </View>
-          )}
+            {subtitle && <Text style={[styles.periodSub, { color: colors.tint }]}>{subtitle}</Text>}
+          </TouchableOpacity>
         </View>
-        <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
+        {/* 직접 고른 기간이면 '자세히' 대신 '이번 달로' — 카드 나머지 부분을 누르면 여전히 가계부 탭으로 간다 */}
+        {custom ? (
+          <TouchableOpacity onPress={onResetPeriod} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button">
+            <Text style={[styles.cardLink, { color: colors.tint }]}>이번 달로</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
+        )}
       </View>
       <View style={styles.budgetRow}>
         <View style={styles.budgetItem}>
@@ -444,14 +469,7 @@ function BudgetSummaryCard({
         )}
       </View>
 
-      <DateJumpSheet
-        visible={pickerVisible}
-        onClose={() => setPickerVisible(false)}
-        mode="month"
-        selectedDate={`${year}-${String(month).padStart(2, "0")}-01`}
-        onPickMonth={onPickMonth}
-        colors={colors}
-      />
+      <BudgetPeriodSheet visible={pickerVisible} onClose={() => setPickerVisible(false)} colors={colors} />
     </TouchableOpacity>
   );
 }
@@ -588,7 +606,12 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   // 홈은 항상 "이번 달·오늘" 기준 — 일정 탭에서 다른 달로 넘겨도 영향받지 않는 전용 값을 쓴다
-  const { homeYear, homeMonth, homeIncome, homeExpense, todayTransactions, loadHomeMonth, loadTodayTransactions } = useBudgetStore();
+  const {
+    homeYear, homeMonth, homeRange, homeCustom, homeIncome, homeExpense, todayTransactions,
+    loadCurrentPeriod, loadTodayTransactions,
+  } = useBudgetStore();
+  // 한 달 시작일은 저장소에서 읽어 오므로, 다 읽은 뒤에(settingsLoaded) 이번 달 기간을 다시 계산한다
+  const { monthStartDay, isLoaded: settingsLoaded } = useSettingsStore();
   const { todaySchedules, loadToday } = useScheduleStore();
   const { load: loadTodos } = useTodoStore();
 
@@ -597,8 +620,6 @@ export default function HomeScreen() {
   const lastActiveDateRef = useRef(todayString());
 
   useEffect(() => {
-    const now = new Date();
-    loadHomeMonth(now.getFullYear(), now.getMonth() + 1);
     loadTodayTransactions();
     loadToday();
     loadTodos();
@@ -612,9 +633,8 @@ export default function HomeScreen() {
         const currentDate = todayString();
         loadTodos();
         if (currentDate !== lastActiveDateRef.current) {
-          // 날짜가 바뀌면(특히 새 달이 되면) 가계부 카드를 이번 달로 되돌린다
-          const d = new Date();
-          loadHomeMonth(d.getFullYear(), d.getMonth() + 1);
+          // 날짜가 바뀌면(특히 새 기간이 시작되면) 가계부 카드를 이번 달로 되돌린다
+          loadCurrentPeriod();
           // 자정이 지나면 '오늘 내역'도 새 날짜 기준으로 다시 읽는다
           loadTodayTransactions();
           loadToday();
@@ -624,7 +644,12 @@ export default function HomeScreen() {
     });
     return () => sub.remove();
     // Zustand store 액션은 안정적 참조 — 의존성에 포함해도 무한 루프 없음
-  }, [loadHomeMonth, loadToday, loadTodayTransactions, loadTodos]);
+  }, [loadCurrentPeriod, loadToday, loadTodayTransactions, loadTodos]);
+
+  // 처음 켤 때 이번 달 기간을 불러온다 — 설정(한 달 시작일)을 읽기 전에 계산하면 1일 기준이 되므로 기다린다
+  useEffect(() => {
+    if (settingsLoaded) loadCurrentPeriod();
+  }, [settingsLoaded, loadCurrentPeriod]);
 
   const today = todayString();
 
@@ -683,9 +708,10 @@ export default function HomeScreen() {
       {/* 가계부 요약 — 일정·할 일보다 부차적인 정보 */}
       <Text style={[styles.sectionLabel, { color: colors.subtext }]}>가계부</Text>
       <BudgetSummaryCard
-        year={homeYear} month={homeMonth} income={homeIncome} expense={homeExpense} colors={colors}
+        year={homeYear} month={homeMonth} range={homeRange} custom={homeCustom} monthStartDay={monthStartDay}
+        income={homeIncome} expense={homeExpense} colors={colors}
         todayTransactions={todayTransactions}
-        onPickMonth={loadHomeMonth}
+        onResetPeriod={loadCurrentPeriod}
       />
 
       {/* 설정 모달 */}
@@ -742,6 +768,8 @@ const styles = StyleSheet.create({
   cardLink: { fontSize: 13 },
   monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
   monthCaret: { fontSize: 11 },
+  monthTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  periodSub: { fontSize: 11.5, fontWeight: "500", marginTop: 2 },
   thisMonthPill: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   thisMonthText: { fontSize: 10, fontWeight: "700" },
   emptyText: { fontSize: 14 },

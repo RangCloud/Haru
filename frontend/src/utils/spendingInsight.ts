@@ -11,7 +11,8 @@
  *   3) buildInsight() — 합계·카테고리·문장을 계산한다
  */
 
-import { parseDate, toDateStr } from "@/src/utils/date";
+import { formatRange, monthPeriod, periodOfDate } from "@/src/utils/budgetPeriod";
+import { parseDate, shiftMonth, toDateStr } from "@/src/utils/date";
 
 export type PeriodUnit = "week" | "month" | "year";
 
@@ -76,8 +77,9 @@ function subject(word: string): string {
 /**
  * 기준 날짜가 속한 기간과 직전 기간을 구한다.
  * 주는 달력과 같이 일요일에 시작한다.
+ * 달은 가계부의 '한 달 시작일'(startDay, 기본 1일, 0=말일)을 따른다 — 홈·가계부 탭과 같은 기준.
  */
-export function getPeriod(unit: PeriodUnit, anchor: string, today: string): Period {
+export function getPeriod(unit: PeriodUnit, anchor: string, today: string, startDay = 1): Period {
   const a = parseDate(anchor);
   let start: Date;
   let end: Date;
@@ -94,12 +96,18 @@ export function getPeriod(unit: PeriodUnit, anchor: string, today: string): Peri
     label = `${monthDay(start)} ~ ${monthDay(end)}`;
     prevLabel = "전주";
   } else if (unit === "month") {
-    start = new Date(a.getFullYear(), a.getMonth(), 1);
-    end = new Date(a.getFullYear(), a.getMonth() + 1, 0);       // 다음 달 0일 = 이번 달 말일
-    prevStart = new Date(a.getFullYear(), a.getMonth() - 1, 1);
-    prevFullEnd = new Date(a.getFullYear(), a.getMonth(), 0);
-    label = `${start.getFullYear()}년 ${start.getMonth() + 1}월`;
-    prevLabel = `${prevStart.getMonth() + 1}월`;
+    // 기준 날짜가 속한 '한 달'과 그 앞 달 — 시작일 10일이면 10/15 → 10월(10/10 ~ 11/9), 직전은 9월(9/10 ~ 10/9)
+    const name = periodOfDate(anchor, startDay);
+    const prevName = shiftMonth(name.year, name.month, -1);
+    const cur = monthPeriod(name.year, name.month, startDay);
+    const prev = monthPeriod(prevName.year, prevName.month, startDay);
+    start = parseDate(cur.start);
+    end = parseDate(cur.end);
+    prevStart = parseDate(prev.start);
+    prevFullEnd = parseDate(prev.end);
+    // 1일 시작이면 '2026년 10월', 아니면 이름만으로는 날짜를 알 수 없으므로 실제 범위를 보여 준다
+    label = startDay === 1 ? `${name.year}년 ${name.month}월` : formatRange(cur);
+    prevLabel = `${prevName.month}월`;
   } else {
     start = new Date(a.getFullYear(), 0, 1);
     end = new Date(a.getFullYear(), 11, 31);
@@ -129,11 +137,16 @@ export function getPeriod(unit: PeriodUnit, anchor: string, today: string): Peri
 }
 
 /** 기준 날짜를 한 기간 앞(-1)·뒤(+1)로 옮긴다 — 화면의 이전/다음 이동에 쓴다 */
-export function shiftAnchor(unit: PeriodUnit, anchor: string, delta: -1 | 1): string {
+export function shiftAnchor(unit: PeriodUnit, anchor: string, delta: -1 | 1, startDay = 1): string {
   const a = parseDate(anchor);
   if (unit === "week") return fmt(addDays(a, 7 * delta));
-  // 달·년은 1일 기준으로 옮긴다 — 31일에서 한 달 뒤로 가면 다음다음 달로 넘어가는 문제를 피한다
-  if (unit === "month") return fmt(new Date(a.getFullYear(), a.getMonth() + delta, 1));
+  // 달은 옮긴 달 기간의 첫날로 옮긴다 — 31일에서 한 달 뒤로 가면 다음다음 달로 넘어가는 문제를 피하고,
+  // 시작일이 10일일 때 '1일'로 옮기면 지난달 기간에 속해 버리는 문제도 피한다
+  if (unit === "month") {
+    const name = periodOfDate(anchor, startDay);
+    const next = shiftMonth(name.year, name.month, delta);
+    return monthPeriod(next.year, next.month, startDay).start;
+  }
   return fmt(new Date(a.getFullYear() + delta, a.getMonth(), 1));
 }
 

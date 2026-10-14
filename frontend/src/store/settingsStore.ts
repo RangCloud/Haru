@@ -1,9 +1,10 @@
 /**
- * 앱 설정 스토어 — 시작 화면·뉴스 카테고리·글자 크기
+ * 앱 설정 스토어 — 시작 화면·뉴스 카테고리·글자 크기·가계부 한 달 시작일
  *
  * 앱을 새로 켰을 때 먼저 보여줄 탭을 사용자가 고른다 (홈·일정·가계부·운세·뉴스).
  * 뉴스 탭에 보여줄 카테고리와 순서도 사용자가 정한다.
  * 글자 크기는 4단계 중에서 고르며, 고르는 즉시 모든 화면의 글자에 배율로 적용된다.
+ * 가계부 한 달 시작일(1~31, 0=말일)을 정하면 그날부터 다음 달 전날까지가 가계부의 한 달이 된다.
  * 테마 설정(themeStore)과 같은 방식으로 SecureStore에 저장해 재시작 후에도 유지한다.
  * 민감한 값은 아니지만, 이미 쓰고 있는 저장소를 재사용해 새 라이브러리를 들이지 않기 위함이다.
  */
@@ -13,6 +14,7 @@ import { Platform } from "react-native";
 import { create } from "zustand";
 
 import { NEWS_CATEGORIES, type NewsCategory } from "@/src/api/news";
+import { isMonthStartDay } from "@/src/utils/budgetPeriod";
 
 export type StartTab = "index" | "schedule" | "budget" | "fortune" | "news";
 
@@ -39,6 +41,7 @@ export const FONT_SIZE_OPTIONS: { value: FontSize; label: string }[] = [
 const START_TAB_KEY = "haru_start_tab";
 const NEWS_CATEGORIES_KEY = "haru_news_categories";
 const FONT_SIZE_KEY = "haru_font_size";
+const MONTH_START_DAY_KEY = "haru_month_start_day";
 
 const ALL_NEWS = NEWS_CATEGORIES.map((c) => c.value);
 
@@ -48,10 +51,13 @@ interface SettingsState {
   newsCategories: NewsCategory[];
   /** 글자 크기 단계 — 실제 배율은 FONT_SCALES[fontSize] */
   fontSize: FontSize;
+  /** 가계부 한 달 시작일 — 1~31, 0은 말일 (기본 1일 = 지금까지와 같은 1일~말일) */
+  monthStartDay: number;
   isLoaded: boolean;       // 저장값을 읽기 전에 시작 탭을 적용하지 않도록 구분
   setStartTab: (tab: StartTab) => Promise<void>;
   setNewsCategories: (cats: NewsCategory[]) => Promise<void>;
   setFontSize: (size: FontSize) => Promise<void>;
+  setMonthStartDay: (day: number) => Promise<void>;
   loadSettings: () => Promise<void>;
 }
 
@@ -85,6 +91,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   startTab: "index",
   newsCategories: ALL_NEWS,
   fontSize: "normal",
+  monthStartDay: 1,
   isLoaded: false,
 
   setStartTab: async (tab) => {
@@ -104,15 +111,24 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     await save(FONT_SIZE_KEY, size);
   },
 
+  setMonthStartDay: async (day) => {
+    if (!isMonthStartDay(day)) return;
+    set({ monthStartDay: day });
+    await save(MONTH_START_DAY_KEY, String(day));
+  },
+
   loadSettings: async () => {
     try {
       if (Platform.OS !== "web") {
-        const [tab, news, font] = await Promise.all([
+        const [tab, news, font, startDay] = await Promise.all([
           SecureStore.getItemAsync(START_TAB_KEY),
           SecureStore.getItemAsync(NEWS_CATEGORIES_KEY),
           SecureStore.getItemAsync(FONT_SIZE_KEY),
+          SecureStore.getItemAsync(MONTH_START_DAY_KEY),
         ]);
         if (isFontSize(font)) set({ fontSize: font });
+        // 숫자가 아니거나 범위를 벗어난 값이면 기본값(1일)을 유지한다
+        if (startDay !== null && isMonthStartDay(Number(startDay))) set({ monthStartDay: Number(startDay) });
         if (isStartTab(tab)) set({ startTab: tab });
         const cats = parseNewsCategories(news);
         if (cats) set({ newsCategories: cats });

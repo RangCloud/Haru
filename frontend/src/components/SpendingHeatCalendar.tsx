@@ -13,6 +13,10 @@
  * 다른 칸이 사라지던 문제를 피하기 위함이다 (자세한 이유는 MonthCalendar 주석 참고).
  *
  * 한 주씩 줄로 그린다 (칸 너비를 %로 주고 줄바꿈에 맡기면 날짜가 밀리는 문제는 MonthCalendar 주석 참고).
+ *
+ * 한 달 시작일이 1일이 아니면 기간이 두 달에 걸친다 (예: 10월 10일 ~ 11월 9일).
+ * 그때는 달마다 '10월', '11월' 이름을 붙여 따로 그리고, 기간 밖의 날짜는 빈칸으로 둔다.
+ * 요일 머리줄은 맨 위에 한 번만 둔다.
  */
 
 import { useMemo } from "react";
@@ -20,11 +24,12 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/theme";
 import { Text, useFontScale } from "@/src/components/AppText";
+import { monthsInRange, type DateRange } from "@/src/utils/budgetPeriod";
 import { buildCalendarWeeks, toDateStr, WEEKDAYS_KO } from "@/src/utils/date";
 
 interface SpendingHeatCalendarProps {
-  year: number;
-  month: number;
+  /** 그릴 기간 (양 끝 포함) — 기간 밖 날짜는 빈칸 */
+  range: DateRange;
   /** 날짜(YYYY-MM-DD)별 지출 합계 (원). 지출이 없는 날은 키가 없어도 된다 */
   expenseByDate: Record<string, number>;
   selectedDate: string | null;
@@ -44,8 +49,20 @@ function alphaHex(alpha: number): string {
   return Math.round(alpha * 255).toString(16).padStart(2, "0");
 }
 
-export function SpendingHeatCalendar({ year, month, expenseByDate, selectedDate, today, onSelectDate, colors }: SpendingHeatCalendarProps) {
-  const weeks = useMemo(() => buildCalendarWeeks(year, month), [year, month]);
+export function SpendingHeatCalendar({ range, expenseByDate, selectedDate, today, onSelectDate, colors }: SpendingHeatCalendarProps) {
+  // 달마다 주 단위 칸을 만들고, 기간에 날짜가 하나도 없는 주(예: 10/10 시작인 달의 첫 주)는 빼서 빈 줄이 생기지 않게 한다
+  const months = useMemo(() => monthsInRange(range).map(({ year, month }) => ({
+    year,
+    month,
+    weeks: buildCalendarWeeks(year, month).filter((week) =>
+      week.some((day) => {
+        if (day === null) return false;
+        const date = toDateStr(year, month, day);
+        return date >= range.start && date <= range.end;
+      }),
+    ),
+  })), [range]);
+  const multiMonth = months.length > 1;
   const max = useMemo(() => Math.max(0, ...Object.values(expenseByDate)), [expenseByDate]);
   const scale = useFontScale(CELL_MAX_SCALE);
 
@@ -57,52 +74,60 @@ export function SpendingHeatCalendar({ year, month, expenseByDate, selectedDate,
         ))}
       </View>
 
-      {weeks.map((week, wi) => (
-        <View key={wi} style={styles.row}>
-          {week.map((day, di) => {
-            // 1일 앞·말일 뒤의 빈칸 — 자리를 차지해야 요일이 어긋나지 않는다
-            if (day === null) return <View key={`empty-${di}`} style={styles.cellSlot} />;
+      {months.map(({ year, month, weeks }) => (
+        <View key={`${year}-${month}`}>
+          {multiMonth && (
+            <Text maxScale={CELL_MAX_SCALE} style={[styles.monthLabel, { color: colors.subtext }]}>{month}월</Text>
+          )}
+          {weeks.map((week, wi) => (
+            <View key={wi} style={styles.row}>
+              {week.map((day, di) => {
+                // 1일 앞·말일 뒤의 빈칸과 기간 밖 날짜 — 자리를 차지해야 요일이 어긋나지 않는다
+                if (day === null) return <View key={`empty-${di}`} style={styles.cellSlot} />;
 
-            const date = toDateStr(year, month, day);
-            const amount = expenseByDate[date] ?? 0;
-            const isSelected = date === selectedDate;
-            const isToday = date === today;
-            const isFuture = date > today;
-            // 지출이 있으면 그 달 최댓값 대비 비율만큼 진하게, 없으면 바탕색 그대로
-            const background = amount > 0 && max > 0
-              ? `${colors.expense}${alphaHex(MIN_ALPHA + (amount / max) * (MAX_ALPHA - MIN_ALPHA))}`
-              : colors.background;
+                const date = toDateStr(year, month, day);
+                if (date < range.start || date > range.end) return <View key={`out-${di}`} style={styles.cellSlot} />;
+                const amount = expenseByDate[date] ?? 0;
+                const isSelected = date === selectedDate;
+                const isToday = date === today;
+                const isFuture = date > today;
+                // 지출이 있으면 그 기간 최댓값 대비 비율만큼 진하게, 없으면 바탕색 그대로
+                const background = amount > 0 && max > 0
+                  ? `${colors.expense}${alphaHex(MIN_ALPHA + (amount / max) * (MAX_ALPHA - MIN_ALPHA))}`
+                  : colors.background;
 
-            return (
-              <View key={date} style={styles.cellSlot}>
-                <Pressable
-                  onPress={() => onSelectDate(isSelected ? null : date)}
-                  style={({ pressed }) => [
-                    styles.cell,
-                    { height: 30 * scale, backgroundColor: background, borderColor: isSelected ? colors.tint : "transparent" },
-                    pressed && styles.pressed,
-                  ]}
-                  // 칸이 작으므로 눌리는 영역을 위아래로 조금 넓힌다 (옆 칸과는 겹치지 않게 세로만)
-                  hitSlop={{ top: 4, bottom: 4 }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={`${month}월 ${day}일${isToday ? ", 오늘" : ""}, ${amount > 0 ? `지출 ${amount.toLocaleString("ko-KR")}원` : "지출 없음"}`}
-                >
-                  <Text
-                    maxScale={CELL_MAX_SCALE}
-                    style={[
-                      styles.dayText,
-                      { color: isFuture ? colors.subtext : colors.text },
-                      isFuture && styles.future,
-                      isToday && styles.todayText,
-                    ]}
-                  >
-                    {day}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
+                return (
+                  <View key={date} style={styles.cellSlot}>
+                    <Pressable
+                      onPress={() => onSelectDate(isSelected ? null : date)}
+                      style={({ pressed }) => [
+                        styles.cell,
+                        { height: 30 * scale, backgroundColor: background, borderColor: isSelected ? colors.tint : "transparent" },
+                        pressed && styles.pressed,
+                      ]}
+                      // 칸이 작으므로 눌리는 영역을 위아래로 조금 넓힌다 (옆 칸과는 겹치지 않게 세로만)
+                      hitSlop={{ top: 4, bottom: 4 }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${month}월 ${day}일${isToday ? ", 오늘" : ""}, ${amount > 0 ? `지출 ${amount.toLocaleString("ko-KR")}원` : "지출 없음"}`}
+                    >
+                      <Text
+                        maxScale={CELL_MAX_SCALE}
+                        style={[
+                          styles.dayText,
+                          { color: isFuture ? colors.subtext : colors.text },
+                          isFuture && styles.future,
+                          isToday && styles.todayText,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -111,6 +136,7 @@ export function SpendingHeatCalendar({ year, month, expenseByDate, selectedDate,
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row" },
+  monthLabel: { fontSize: 11, fontWeight: "700", paddingTop: 4, paddingBottom: 2, paddingLeft: 2 },
   weekday: { flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", paddingBottom: 4 },
   // 칸 사이 간격은 바깥 틀의 안쪽 여백으로 만든다 (gap을 쓰면 7칸 너비 계산이 기기마다 달라질 수 있다)
   cellSlot: { flex: 1, padding: 1.5 },
