@@ -26,6 +26,11 @@ export const Colors = {
     income: "#16A34A",           // 수입 초록
     expense: "#DC2626",          // 지출 빨강
     separator: "#EBEBF5",
+    // 중요 할 일 체크박스 — 별 색(#F5B400)은 흰 카드 위에서 1.84:1이라 테두리는 더 진한 호박색(3.61:1)을 쓴다
+    important: "#B87A00",        // 안 한 일 테두리
+    importantSoft: "#FFF5D6",    // 안 한 일 바탕 (일반 체크박스와 면으로도 구분되게)
+    importantFill: "#F5B400",    // 완료 채움 — 인디고보다 밝아서 흑백에서도 구분됨
+    importantCheck: "#18182E",   // 완료 체크 — 흰 체크는 호박 위에서 1.84:1이라 진한 색(9.44:1)
   },
   dark: {
     background: "#0E0E1A",       // 짙은 다크 네이비
@@ -42,6 +47,11 @@ export const Colors = {
     income: "#4ADE80",           // 다크 모드용 밝은 초록
     expense: "#F87171",          // 다크 모드용 밝은 빨강
     separator: "#28284A",
+    // 중요 할 일 체크박스 — 다크 카드 위에서는 별 색 그대로도 9.29:1이라 충분하다
+    important: "#F5B400",
+    importantSoft: "#2B2513",
+    importantFill: "#F5B400",
+    importantCheck: "#1A1A2C",   // 카드색 체크 (9.29:1)
   },
 };
 
