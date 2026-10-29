@@ -64,3 +64,34 @@ export async function fetchFortune(params: FortuneFetchParams): Promise<FortuneD
     clearTimeout(timeout);
   }
 }
+
+// ── 운세 신고 ────────────────────────────────────────────────
+
+/**
+ * 부적절한 AI 운세를 신고한다.
+ *
+ * Google Play AI 생성 콘텐츠 정책: 사용자가 앱을 나가지 않고 불쾌한 AI 결과를 신고할 수 있어야 한다.
+ * 운세 글과 날짜만 보낸다 — 생년월일은 신고 처리에 필요 없으므로 보내지 않는다.
+ */
+export async function reportFortune(date: string, content: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/fortune/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, content }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as { detail?: string }).detail ?? `신고 실패 (HTTP ${res.status})`);
+    }
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("신고 요청 시간이 초과됐습니다.");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}

@@ -7,6 +7,8 @@
  * - 격자 좌표 변환, 응답 파싱, 캐싱은 백엔드에서 처리
  */
 
+import type { KmaGrid } from "@/src/utils/kmaGrid";
+
 // Oracle Cloud 배포 URL
 const API_BASE = "https://haru-api.duckdns.org";
 
@@ -32,8 +34,9 @@ export interface WeatherData {
 
 // ── API 호출 ─────────────────────────────────────────────────
 
-export async function fetchWeather(lat: number, lon: number): Promise<WeatherData> {
-  const url = `${API_BASE}/api/weather?lat=${lat}&lon=${lon}`;
+// 위도·경도가 아니라 기상청 격자 번호만 보낸다 — 좌표는 기기 밖으로 나가지 않는다 (src/utils/kmaGrid.ts 참고)
+export async function fetchWeather(grid: KmaGrid): Promise<WeatherData> {
+  const url = `${API_BASE}/api/weather?nx=${grid.nx}&ny=${grid.ny}`;
 
   // 10초 초과 시 요청 취소 — 기상청 API가 느릴 때 화면이 무한 로딩되는 현상 방지
   const controller = new AbortController();

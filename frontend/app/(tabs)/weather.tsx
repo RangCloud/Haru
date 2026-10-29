@@ -11,6 +11,7 @@ import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchWeather, type HourlyWeather, type WeatherData } from "@/src/api/weather";
 import { Text } from "@/src/components/AppText";
+import { latlonToGrid, SEOUL_GRID } from "@/src/utils/kmaGrid";
 
 // ── 날씨 아이콘 ───────────────────────────────────────────────
 
@@ -68,11 +69,8 @@ export default function WeatherScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 에뮬레이터·시뮬레이터에서 GPS가 실패할 수 있으므로 서울 좌표를 fallback으로 사용한다.
-  // 실제 기기에서는 GPS가 정상 동작하므로 fallback이 거의 쓰이지 않는다.
-  const SEOUL_LAT = 37.5665;
-  const SEOUL_LON = 126.9780;
-
+  // 에뮬레이터·시뮬레이터에서 GPS가 실패할 수 있으므로 서울 격자를 fallback으로 사용한다.
+  // 위도·경도는 기기 안에서 격자로 바꾼 뒤 버린다 — 서버에는 격자 번호만 간다 (src/utils/kmaGrid.ts)
   const [usingFallback, setUsingFallback] = useState(false);
 
   const loadWeather = useCallback(async () => {
@@ -80,8 +78,7 @@ export default function WeatherScreen() {
       setError(null);
       setUsingFallback(false);
 
-      let lat = SEOUL_LAT;
-      let lon = SEOUL_LON;
+      let grid = SEOUL_GRID;
       let fallback = false;
 
       try {
@@ -89,13 +86,13 @@ export default function WeatherScreen() {
         if (status === "granted") {
           // 3초 내 GPS 응답이 없으면 fallback (에뮬레이터에서 GPS가 무한 대기하는 경우 대비)
           const loc = await Promise.race([
-            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            // 날씨는 5km 격자 단위라 대략적인 위치(Low)로 충분하다
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error("GPS timeout")), 3000)
             ),
           ]);
-          lat = loc.coords.latitude;
-          lon = loc.coords.longitude;
+          grid = latlonToGrid(loc.coords.latitude, loc.coords.longitude);
         } else {
           fallback = true;
         }
@@ -105,7 +102,7 @@ export default function WeatherScreen() {
       }
 
       setUsingFallback(fallback);
-      const data = await fetchWeather(lat, lon);
+      const data = await fetchWeather(grid);
       setWeather(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "날씨 정보를 불러오지 못했습니다.");

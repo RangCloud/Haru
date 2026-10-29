@@ -5,6 +5,7 @@
  */
 
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -16,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PRIVACY_POLICY_URL, SUPPORT_URL } from "@/constants/links";
 import { Colors, cardShadow } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
@@ -112,6 +114,15 @@ function SettingsModal({
     onClose();
     await signOut();
     router.replace("/(auth)/login");
+  };
+
+  // 개인정보처리방침·고객 지원 페이지를 앱 안 브라우저로 연다 (심사 지침 5.1.1(i): 방침은 앱 안에서 열 수 있어야 한다).
+  // iOS는 설정 시트(Modal)가 떠 있는 동안 브라우저 창을 겹쳐 띄우면 열리지 않을 수 있어, 시트를 닫은 뒤에 연다.
+  const openPage = (url: string) => {
+    onClose();
+    setTimeout(() => {
+      WebBrowser.openBrowserAsync(url).catch(() => {});
+    }, 300);
   };
 
   return (
@@ -253,6 +264,30 @@ function SettingsModal({
           <Text style={[settingStyles.listValue, { color: colors.subtext }]}>1.0.0</Text>
         </View>
       </View>
+      {/* 개인정보처리방침 — 데이터 삭제 요청 방법도 이 페이지와 지원 페이지에 있다 */}
+      <TouchableOpacity
+        style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+        onPress={() => openPage(PRIVACY_POLICY_URL)}
+        accessibilityRole="link"
+      >
+        <View style={settingStyles.listRow}>
+          <Text style={[settingStyles.listLabel, settingStyles.listContent, { color: colors.text }]}>개인정보처리방침</Text>
+          <Text style={[settingStyles.listValue, { color: colors.subtext }]}>→</Text>
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+        onPress={() => openPage(SUPPORT_URL)}
+        accessibilityRole="link"
+      >
+        <View style={settingStyles.listRow}>
+          <View style={settingStyles.listContent}>
+            <Text style={[settingStyles.listLabel, { color: colors.text }]}>고객 지원</Text>
+            <Text style={[settingStyles.listSub, { color: colors.subtext }]}>문의 · 데이터 삭제 요청</Text>
+          </View>
+          <Text style={[settingStyles.listValue, { color: colors.subtext }]}>→</Text>
+        </View>
+      </TouchableOpacity>
 
       {/* 로그아웃 */}
       <TouchableOpacity

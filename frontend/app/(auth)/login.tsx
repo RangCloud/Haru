@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 
+import { PRIVACY_POLICY_URL } from "@/constants/links";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
@@ -204,9 +205,19 @@ export default function LoginScreen() {
         </Text>
       </TouchableOpacity>
 
+      {/* 따로 만든 이용약관이 없으므로 개인정보처리방침만 안내한다 (없는 문서에 동의하게 하면 심사에서 문제가 된다).
+          링크 글자가 작아 누르기 어려우므로 hitSlop으로 터치 영역을 44pt 이상으로 넓힌다 */}
       <Text style={[styles.notice, { color: colors.subtext }]}>
-        로그인 시 이용약관 및 개인정보처리방침에{"\n"}동의하게 됩니다.
+        로그인하면 개인정보처리방침에 동의하게 됩니다.
       </Text>
+      <TouchableOpacity
+        onPress={() => WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL).catch(() => {})}
+        hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
+        accessibilityRole="link"
+        accessibilityLabel="개인정보처리방침 보기"
+      >
+        <Text style={[styles.noticeLink, { color: colors.tint }]}>개인정보처리방침 보기</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -292,5 +303,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: "center",
     lineHeight: 18,
+  },
+  noticeLink: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    textDecorationLine: "underline",
+    marginTop: 4,
   },
 });

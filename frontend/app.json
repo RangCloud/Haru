@@ -9,14 +9,15 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.rangcloud.haru",
       "usesAppleSignIn": true,
       "entitlements": {
         "com.apple.security.application-groups": ["group.com.rangcloud.haru"]
       },
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "현재 위치의 날씨를 보여주기 위해 위치 정보가 필요합니다.",
+        "NSLocationWhenInUseUsageDescription": "현재 지역의 날씨를 보여주기 위해 대략적인 위치가 필요합니다. 위치는 기기 안에서 약 5km 단위 지역으로 바뀐 뒤 사용되며, 좌표는 서버로 보내지 않습니다.",
+        "NSLocationDefaultAccuracyReduced": true,
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -24,13 +25,13 @@
       "package": "com.rangcloud.haru",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.READ_CALENDAR",
         "android.permission.WRITE_CALENDAR"
       ],
+      "blockedPermissions": ["android.permission.ACCESS_FINE_LOCATION"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

@@ -1,6 +1,8 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <!-- 정확한 위치 권한 제거: 날씨는 대략적인 위치(5km 격자)면 충분하고, 위치정보법상 좌표를 다루지 않기 위해서다.
+       expo-location 라이브러리 매니페스트가 이 권한을 넣으므로 tools:node="remove"로 병합 단계에서 뺀다 -->
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove"/>
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   <!-- 기기 캘린더에서 일정 가져오기용. 앱은 읽기만 하지만, 캘린더 모듈(expo-calendar)이
