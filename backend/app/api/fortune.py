@@ -1,14 +1,18 @@
 """
-운세 API 라우터 — GET /api/fortune
+운세 API 라우터 — GET /api/fortune, POST /api/fortune/report
 
 이 파일은 라우팅·입력 검증만 담당한다.
-Claude API 호출·캐싱·레이트 리밋은 services/fortune.py에서 처리한다.
+Claude API 호출·캐싱·레이트 리밋·신고 기록은 services/fortune.py에서 처리한다.
 """
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.schemas.fortune import FortuneResponse
-from app.services.fortune import get_fortune
+from app.schemas.fortune import (
+    FortuneReportRequest,
+    FortuneReportResponse,
+    FortuneResponse,
+)
+from app.services.fortune import get_fortune, report_fortune
 
 router = APIRouter(tags=["운세"])
 
@@ -61,3 +65,19 @@ async def fortune(
         raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"운세 조회 실패: {e!s}")
+
+
+@router.post("/fortune/report", response_model=FortuneReportResponse)
+async def fortune_report(body: FortuneReportRequest) -> FortuneReportResponse:
+    """
+    부적절한 AI 운세를 신고한다 (Google Play AI 생성 콘텐츠 정책 대응).
+
+    - 본문: 운세 날짜와 글 (생년월일은 받지 않음)
+    - 서버 기록에만 남기고, 일일 보고에서 신고 수를 알린다
+    - 하루 신고 상한을 넘으면 429
+    """
+    try:
+        report_fortune(date=body.date, content=body.content)
+    except RuntimeError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    return FortuneReportResponse(received=True)

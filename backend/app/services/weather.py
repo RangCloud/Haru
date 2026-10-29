@@ -17,7 +17,7 @@ from urllib.parse import unquote
 import httpx
 
 from app.core.config import settings
-from app.core.coordinates import latlon_to_grid
+from app.core.coordinates import GridXY
 from app.schemas.weather import HourlyWeather, WeatherResponse
 
 # ──────────────────────────────────────────────────────────────
@@ -118,13 +118,15 @@ def _parse_items(items: list[dict]) -> list[HourlyWeather]:
     return hourly
 
 
-async def get_weather(lat: float, lon: float) -> WeatherResponse:
+async def get_weather(grid: GridXY) -> WeatherResponse:
     """
-    위경도를 받아 기상청 단기예보를 조회하고 정제된 응답을 반환한다.
+    기상청 격자(nx, ny)를 받아 단기예보를 조회하고 정제된 응답을 반환한다.
+
+    위경도 → 격자 변환은 라우터(옛 앱 호환) 또는 앱(새 빌드, 기기 안에서 변환)이 맡는다.
+    이 함수는 좌표를 전혀 다루지 않는다.
 
     캐시 키: 격자 좌표 + 예보 기준 시각 → 같은 격자의 같은 예보 시간대면 캐시 반환.
     """
-    grid = latlon_to_grid(lat, lon)
     now = datetime.now(KST)
     base_date, base_time = _get_base_time(now)
 

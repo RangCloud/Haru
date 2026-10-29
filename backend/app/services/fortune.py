@@ -171,3 +171,35 @@ async def get_fortune(
 
     _cache[cache_key] = (time.time(), result)
     return result
+
+
+# ── 운세 신고 ────────────────────────────────────────────────────
+
+# 하루 신고 기록 상한. 신고 주소도 로그인 없이 부를 수 있으므로, 누군가 반복 호출해
+# 서버 기록(journald)을 채우지 못하도록 막는다. 실제 사용자 신고는 하루 몇 건 수준일 것이다.
+REPORT_DAILY_LIMIT = 100
+
+# 일별 신고 카운터 — { "YYYY-MM-DD": 신고_횟수 } (_daily_calls와 같은 방식으로 지난 날짜는 지운다)
+_daily_reports: dict[str, int] = {}
+
+
+def report_fortune(date: str, content: str) -> None:
+    """
+    부적절한 AI 운세 신고를 서버 기록에 남긴다.
+
+    - 일일 보고(scripts/daily_report.py)가 "FORTUNE_REPORT" 표식으로 어제 신고 수를 센다.
+    - 내용 확인: journalctl -u haru | grep FORTUNE_REPORT
+    - 기록은 journald 보관 기간(14일)이 지나면 자동으로 지워진다. 별도 DB에 쌓지 않는다.
+    - 생년월일은 받지 않으므로 기록에도 없다. 글은 repr()로 남겨 줄바꿈이 있어도 한 줄로 기록되게 한다.
+    """
+    today = _today()
+    for d in list(_daily_reports.keys()):
+        if d != today:
+            del _daily_reports[d]
+
+    count = _daily_reports.get(today, 0)
+    if count >= REPORT_DAILY_LIMIT:
+        raise RuntimeError("오늘은 신고가 많아 더 받을 수 없어요. 내일 다시 시도해 주세요.")
+    _daily_reports[today] = count + 1
+
+    _usage_logger.warning("FORTUNE_REPORT date=%s content=%r", date, content)

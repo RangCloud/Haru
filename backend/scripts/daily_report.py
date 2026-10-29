@@ -46,19 +46,22 @@ SERVICE = "haru"                                  # systemd 서비스 이름 (ha
 ENV_FILE = Path.home() / ".haru-report.env"       # DISCORD_WEBHOOK_URL=... 한 줄이 든 파일
 FORTUNE_DAILY_LIMIT = 150                         # app/services/fortune.py의 DAILY_RATE_LIMIT와 맞춘다
 FORTUNE_LOG_MARK = "FORTUNE_AI_CALL"              # fortune.py가 AI를 실제로 부를 때 남기는 표식
+FORTUNE_REPORT_MARK = "FORTUNE_REPORT"            # fortune.py가 부적절한 운세 신고를 받을 때 남기는 표식
 
 # 경고를 붙일 기준 — 넘으면 메시지 맨 위에 ⚠ 줄로 올린다
 DISK_WARN_PERCENT = 85
 MEMORY_WARN_PERCENT = 90
 
 # uvicorn 접속 기록 한 줄: INFO:     127.0.0.1:5123 - "GET /api/weather?lat=.. HTTP/1.0" 200 OK
-# 경로의 첫 마디(/api/weather)와 상태 코드만 꺼내고, 물음표 뒤(좌표·생년월일)는 버린다.
-ACCESS_LINE = re.compile(r'"(?:GET|POST|PUT|PATCH|DELETE) (/api/[a-z_]+)[^"]*" (\d{3})')
+# 경로의 두 마디까지(/api/weather, /api/fortune/report)와 상태 코드만 꺼내고, 물음표 뒤(좌표·생년월일)는 버린다.
+# 두 마디까지 보는 이유: 신고(/api/fortune/report)가 운세 요청에 섞이면 신고 상한 429가 "운세 한도 초과"로 잘못 집계된다.
+ACCESS_LINE = re.compile(r'"(?:GET|POST|PUT|PATCH|DELETE) (/api/[a-z_]+(?:/[a-z_]+)?)[^"]*" (\d{3})')
 
 API_LABELS = {
     "/api/weather": "날씨",
     "/api/news": "뉴스",
     "/api/fortune": "운세",
+    "/api/fortune/report": "신고",
     "/api/holidays": "공휴일",
 }
 
@@ -98,11 +101,15 @@ def summarize_requests(lines: list[str]) -> dict:
     error_codes: dict[str, Counter[int]] = {}
     fortune_limited = 0
     fortune_ai_calls = 0
+    fortune_reports = 0
     startups = 0
 
     for line in lines:
         if FORTUNE_LOG_MARK in line:
             fortune_ai_calls += 1
+            continue
+        if FORTUNE_REPORT_MARK in line:
+            fortune_reports += 1
             continue
         if "Application startup complete" in line:
             startups += 1
@@ -124,6 +131,7 @@ def summarize_requests(lines: list[str]) -> dict:
         "error_codes": error_codes,
         "fortune_limited": fortune_limited,
         "fortune_ai_calls": fortune_ai_calls,
+        "fortune_reports": fortune_reports,
         "startups": startups,
     }
 
@@ -270,6 +278,11 @@ def build_message(now: datetime) -> str:
             warnings.append(f"운세 하루 한도를 넘어 {limited}건이 거절됐습니다. 한도 상향을 검토하세요.")
         elif calls >= FORTUNE_DAILY_LIMIT * 0.8:
             warnings.append(f"운세 AI 호출이 한도의 {calls / FORTUNE_DAILY_LIMIT * 100:.0f}%에 달했습니다.")
+        # 신고는 사람이 직접 읽고 프롬프트를 고칠지 판단해야 하므로 1건이라도 있으면 맨 위 경고로 올린다
+        reports = stats["fortune_reports"]
+        lines.append(f"부적절한 내용 신고 {reports}건")
+        if reports:
+            warnings.append(f"운세 신고가 {reports}건 들어왔습니다. 확인: journalctl -u haru --since yesterday | grep FORTUNE_REPORT")
         sections.append("**운세 AI 호출 (어제)**\n```\n" + "\n".join(lines) + "\n```")
 
     header = f"**하루 서버 일일 보고** · {start:%m월 %d일} ({'월화수목금토일'[start.weekday()]}) 기준"
