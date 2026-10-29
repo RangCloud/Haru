@@ -5,11 +5,11 @@
  */
 
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
+  Linking,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -116,13 +116,15 @@ function SettingsModal({
     router.replace("/(auth)/login");
   };
 
-  // 개인정보처리방침·고객 지원 페이지를 앱 안 브라우저로 연다 (심사 지침 5.1.1(i): 방침은 앱 안에서 열 수 있어야 한다).
-  // iOS는 설정 시트(Modal)가 떠 있는 동안 브라우저 창을 겹쳐 띄우면 열리지 않을 수 있어, 시트를 닫은 뒤에 연다.
+  // 개인정보처리방침·고객 지원 페이지를 폰의 기본 브라우저(Safari·Chrome)로 연다 (심사 지침 5.1.1(i): 앱 안에서 방침을 열 수 있어야 한다).
+  // 앱 안 브라우저(expo-web-browser)를 쓰지 않는 이유: 설정 시트(Modal)를 닫으면서 띄우면, 시트가 닫히는 애니메이션이
+  // 끝나기 전에는 iOS가 새 창 띄우기를 거부해 아무 반응이 없었다(빌드 테스트에서 실제로 발생). 기본 브라우저는 창을 겹쳐
+  // 띄우지 않으므로 시트를 연 채로 바로 열 수 있고, 돌아오면 설정 시트가 그대로 남아 있다.
+  // 실패를 조용히 넘기지 않는다 — 열리지 않으면 주소를 보여 줘서 직접 열 수 있게 한다.
   const openPage = (url: string) => {
-    onClose();
-    setTimeout(() => {
-      WebBrowser.openBrowserAsync(url).catch(() => {});
-    }, 300);
+    Linking.openURL(url).catch(() => {
+      Alert.alert("페이지를 열지 못했어요", `브라우저에서 아래 주소로 접속해 주세요.\n\n${url}`);
+    });
   };
 
   return (

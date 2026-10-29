@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   StyleSheet,
   TouchableOpacity,
@@ -211,7 +212,10 @@ export default function LoginScreen() {
         로그인하면 개인정보처리방침에 동의하게 됩니다.
       </Text>
       <TouchableOpacity
-        onPress={() => WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL).catch(() => {})}
+        // 앱 안 브라우저가 열리지 않으면(기기에 지원 브라우저가 없는 경우 등) 기본 브라우저로 다시 연다 — 눌렀는데 반응 없는 일을 막는다
+        onPress={() =>
+          WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL).catch(() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {}))
+        }
         hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
         accessibilityRole="link"
         accessibilityLabel="개인정보처리방침 보기"
