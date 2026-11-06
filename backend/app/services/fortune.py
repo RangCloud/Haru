@@ -8,6 +8,7 @@
 """
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -83,6 +84,38 @@ def _make_cache_key(
     return f"{today}_{birth_year}_{birth_month}_{birth_month_type}_{birth_day}_{hour_str}"
 
 
+# 프롬프트 끝에 붙이는 형식 지시.
+# 앱은 운세를 마크다운으로 해석하지 않고 글자 그대로 보여 준다. 그래서 AI가 "# 2026년 11월 6일 운세" 같은
+# 마크다운 제목을 붙이면 '#' 기호가 화면에 그대로 찍힌다(2026-11-06 스크린샷에서 확인).
+_FORMAT_RULE = "마크다운 기호(#, *, - 등)나 제목 줄 없이 일반 문장으로만 작성합니다."
+
+# 굵게 표시(**글자**, __글자__) 기호 — 글자는 남기고 기호만 지운다
+_BOLD_MARK = re.compile(r"\*\*|__")
+
+
+def _clean_content(text: str) -> str:
+    """
+    AI 응답에서 앱 화면에 그대로 찍히는 마크다운 기호를 걷어 낸다.
+
+    프롬프트로 금지해도 모델이 가끔 제목을 붙이므로 서버에서 한 번 더 정리한다(이중 안전장치).
+    앱 빌드를 바꾸지 않고 서버만 고치면 되도록 여기서 처리한다.
+
+    1. '#'으로 시작하는 줄(마크다운 제목)은 운세 본문이 아니라 제목이므로 줄째 지운다.
+       단, 응답이 제목 줄뿐이라면 내용이 사라지지 않도록 '#'만 떼고 글자는 남긴다.
+    2. **굵게** 기호는 글자만 남긴다.
+    3. 제목을 지우고 남은 앞뒤 빈 줄을 정리한다.
+    """
+    lines = text.splitlines()
+    body = [line for line in lines if not line.lstrip().startswith("#")]
+    if any(line.strip() for line in body):
+        lines = body
+    else:
+        # 제목 줄만 온 경우 — '#'과 그 뒤 공백만 떼어 낸다
+        lines = [line.lstrip().lstrip("#").strip() for line in lines]
+    cleaned = _BOLD_MARK.sub("", "\n".join(lines))
+    return cleaned.strip()
+
+
 def _build_prompt(
     today: str,
     birth_year: int | None,
@@ -98,7 +131,8 @@ def _build_prompt(
         return (
             f"오늘({today}) 일반적인 오늘의 운세를 한국어로 작성해 주세요.\n"
             "긍정적이고 따뜻한 톤으로, 150~200자 이내로 간결하게 작성해 주세요.\n"
-            "운세 내용만 작성하고 제목·인사말·부연 설명은 생략합니다."
+            "운세 내용만 작성하고 제목·인사말·부연 설명은 생략합니다.\n"
+            f"{_FORMAT_RULE}"
         )
 
     month_type_label = "양력" if birth_month_type == "solar" else "음력"
@@ -113,7 +147,8 @@ def _build_prompt(
         f"생년월일: {birth_year}년 {birth_month}월({month_type_label}) {birth_day}일, 태어난 시간: {hour_label}\n"
         f"오늘({today}) 이 분의 오늘 하루 운세를 한국어로 작성해 주세요.\n"
         "긍정적이고 따뜻한 톤으로, 오늘 하루 주의할 점·좋은 방향·행운 요소를 포함해 150~200자 이내로 작성해 주세요.\n"
-        "운세 내용만 작성하고 제목·인사말·부연 설명은 생략합니다."
+        "운세 내용만 작성하고 제목·인사말·부연 설명은 생략합니다.\n"
+        f"{_FORMAT_RULE}"
     )
 
 
@@ -157,7 +192,7 @@ async def get_fortune(
     )
 
     content_block = message.content[0]
-    content = content_block.text.strip() if hasattr(content_block, "text") else ""
+    content = _clean_content(content_block.text) if hasattr(content_block, "text") else ""
 
     # sign 필드는 하위 호환성을 위해 유지 (생년월일 기반 시 "personal" 사용)
     sign = "general" if birth_year is None else "personal"
