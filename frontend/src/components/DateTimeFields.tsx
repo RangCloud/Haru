@@ -52,7 +52,7 @@ export function CalendarGrid({ year, month, getState, onSelect, colors }: Calend
     <View>
       <View style={grid.row}>
         {WEEKDAYS_KO.map((w, i) => (
-          <Text key={w} style={[grid.weekday, { color: i === 0 ? colors.expense : i === 6 ? "#3B82F6" : colors.subtext }]}>{w}</Text>
+          <Text key={w} style={[grid.weekday, { color: i === 0 ? colors.sunday : i === 6 ? colors.saturday : colors.subtext }]}>{w}</Text>
         ))}
       </View>
       {buildCalendarWeeks(year, month).map((week, wi) => (
@@ -79,7 +79,7 @@ export function CalendarGrid({ year, month, getState, onSelect, colors }: Calend
                 ]}>
                   <Text style={[
                     grid.dayText,
-                    { color: st.selected ? "#fff" : st.disabled ? colors.separator : isToday ? colors.tint : colors.text },
+                    { color: st.selected ? colors.onTint : st.disabled ? colors.faint : isToday ? colors.tint : colors.text },
                     (st.selected || isToday) && grid.bold,
                   ]}>
                     {day}

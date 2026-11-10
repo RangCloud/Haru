@@ -127,11 +127,11 @@ export function CalendarImportSheet({ visible, onClose, colors }: CalendarImport
         style={[styles.primaryBtn, { backgroundColor: colors.tint, opacity: busy || selected.size === 0 ? 0.5 : 1 }]}
         accessibilityRole="button"
       >
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>일정 가져오기</Text>}
+        {busy ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.primaryText, { color: colors.onTint }]}>일정 가져오기</Text>}
       </TouchableOpacity>
     ) : phase.kind === "done" ? (
       <TouchableOpacity onPress={onClose} style={[styles.primaryBtn, { backgroundColor: colors.tint }]} accessibilityRole="button">
-        <Text style={styles.primaryText}>확인</Text>
+        <Text style={[styles.primaryText, { color: colors.onTint }]}>확인</Text>
       </TouchableOpacity>
     ) : undefined;
 
@@ -196,8 +196,8 @@ export function CalendarImportSheet({ visible, onClose, colors }: CalendarImport
                     accessibilityState={{ checked: on }}
                     accessibilityLabel={`${c.title}${c.account ? `, ${c.account}` : ""}`}
                   >
-                    <View style={[styles.checkbox, { borderColor: on ? colors.tint : colors.separator }, on && { backgroundColor: colors.tint }]}>
-                      {on && <Text maxScale={1} style={styles.check}>✓</Text>}
+                    <View style={[styles.checkbox, { borderColor: on ? colors.tint : colors.subtext }, on && { backgroundColor: colors.tint }]}>
+                      {on && <Text maxScale={1} style={[styles.check, { color: colors.onTint }]}>✓</Text>}
                     </View>
                     <View style={[styles.dot, { backgroundColor: c.color }]} />
                     <View style={styles.rowText}>
@@ -213,7 +213,7 @@ export function CalendarImportSheet({ visible, onClose, colors }: CalendarImport
           )}
 
           <Text style={[styles.label, { color: colors.subtext }]}>기간 — 한 달 전부터 앞으로</Text>
-          <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View style={[styles.segment, { backgroundColor: colors.segment }]}>
             {IMPORT_RANGES.map((r) => {
               const on = r.months === months;
               return (
@@ -221,10 +221,10 @@ export function CalendarImportSheet({ visible, onClose, colors }: CalendarImport
                   key={r.months}
                   onPress={() => setMonths(r.months)}
                   disabled={busy}
-                  style={[styles.segmentBtn, on && { backgroundColor: colors.tint }]}
+                  style={[styles.segmentBtn, on && [styles.segmentBtnOn, { backgroundColor: colors.card }]]}
                   accessibilityState={{ selected: on }}
                 >
-                  <Text style={[styles.segmentText, { color: on ? "#fff" : colors.subtext }]}>{r.label}</Text>
+                  <Text style={[styles.segmentText, on ? { color: colors.text, fontWeight: "700" } : { color: colors.subtext }]}>{r.label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -246,16 +246,20 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, lineHeight: 17 },
   row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 50, borderBottomWidth: StyleSheet.hairlineWidth },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
-  check: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  check: { fontSize: 13, fontWeight: "700" },
   dot: { width: 10, height: 10, borderRadius: 5 },
   rowText: { flex: 1, paddingVertical: 6 },
   rowTitle: { fontSize: 15, fontWeight: "500" },
   rowSub: { fontSize: 12, marginTop: 1 },
-  segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden" },
-  segmentBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
-  segmentText: { fontSize: 14, fontWeight: "600" },
+  // 구간 선택(시안 1) — 회색 바탕 안에서 고른 칸만 흰 바탕
+  segment: { flexDirection: "row", borderRadius: 12, padding: 3 },
+  segmentBtn: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 9 },
+  segmentBtnOn: {
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  segmentText: { fontSize: 14, fontWeight: "500" },
   primaryBtn: { borderRadius: 14, paddingVertical: 15, alignItems: "center" },
-  primaryText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  primaryText: { fontSize: 16, fontWeight: "700" },
   outlineBtn: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginTop: 8 },
   outlineText: { fontSize: 14, fontWeight: "600" },
 });

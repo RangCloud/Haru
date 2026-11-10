@@ -72,10 +72,12 @@ export function BottomSheet({ visible, onClose, title, colors, children, footer,
             { backgroundColor: colors.background, maxHeight, marginBottom: keyboard, paddingBottom: bottomPad },
           ]}
         >
-          <View style={[styles.handle, { backgroundColor: colors.separator }]} />
+          {/* 손잡이 — 미색 바탕에서 separator 색은 거의 안 보여 faint 색을 쓴다 */}
+          <View style={[styles.handle, { backgroundColor: colors.faint }]} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            {/* 아이콘만 있는 버튼 — 화면 읽기용 이름과 44×44 터치 영역 */}
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="닫기">
               <Text style={[styles.close, { color: colors.subtext }]}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -100,13 +102,14 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 10,
   },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 10 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   title: { fontSize: 18, fontWeight: "700" },
-  close: { fontSize: 18, padding: 4 },
+  closeBtn: { width: 44, height: 44, alignItems: "flex-end", justifyContent: "center", marginRight: -6 },
+  close: { fontSize: 18 },
   // flexShrink: 내용이 길면 스크롤 영역이 줄어들고, 짧으면 내용 높이만큼만 차지한다
   scroll: { flexShrink: 1 },
   scrollContent: { gap: 8, paddingBottom: 4 },

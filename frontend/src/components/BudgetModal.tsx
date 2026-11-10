@@ -134,19 +134,21 @@ export function BudgetModal({ visible, initialDate, initialType = "expense", onC
       colors={colors}
       footer={
         <TouchableOpacity style={[styles.submitBtn, { backgroundColor: tone }]} onPress={handleSubmit}>
-          <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
+          <Text style={[styles.submitBtnText, { color: colors.onTint }]}>{isEdit ? "수정하기" : "추가하기"}</Text>
         </TouchableOpacity>
       }
     >
-      {/* 수입/지출 토글 */}
-      <View style={[styles.typeToggle, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      {/* 수입/지출 토글 — 회색 바탕 안에서 고른 쪽만 지출 빨강·수입 초록으로 채운다 */}
+      <View style={[styles.typeToggle, { backgroundColor: colors.segment }]}>
         {(["expense", "income"] as const).map((t) => (
           <TouchableOpacity
             key={t}
             style={[styles.typeBtn, type === t && { backgroundColor: t === "expense" ? colors.expense : colors.income }]}
             onPress={() => switchType(t)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: type === t }}
           >
-            <Text style={[styles.typeBtnText, { color: type === t ? "#fff" : colors.subtext }]}>
+            <Text style={[styles.typeBtnText, { color: type === t ? colors.onTint : colors.subtext }]}>
               {t === "expense" ? "지출" : "수입"}
             </Text>
           </TouchableOpacity>
@@ -169,7 +171,7 @@ export function BudgetModal({ visible, initialDate, initialType = "expense", onC
               category === c && { backgroundColor: tone, borderColor: tone }]}
             onPress={() => setCategory(c)}
           >
-            <Text style={[styles.categoryText, { color: category === c ? "#fff" : colors.subtext }]}>{c}</Text>
+            <Text style={[styles.categoryText, { color: category === c ? colors.onTint : colors.subtext }, category === c && styles.categoryTextOn]}>{c}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -196,12 +198,14 @@ const styles = StyleSheet.create({
   // ── 거래 시트 ─────────────────────────────────────────────
   fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-  submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: "center" },
-  submitBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  typeToggle: { flexDirection: "row", borderRadius: 10, borderWidth: 1, overflow: "hidden", marginBottom: 4 },
-  typeBtn: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  typeBtnText: { fontSize: 15, fontWeight: "600" },
+  submitBtn: { minHeight: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  submitBtnText: { fontSize: 16, fontWeight: "700" },
+  typeToggle: { flexDirection: "row", borderRadius: 12, padding: 3, marginBottom: 4 },
+  typeBtn: { flex: 1, minHeight: 44, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  typeBtnText: { fontSize: 15, fontWeight: "700" },
   categoryList: { gap: 8, paddingVertical: 4 },
-  categoryChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  categoryText: { fontSize: 13 },
+  // 카테고리 칩 — 높이 36, 모서리 10(뉴스 칩과 같은 모양)
+  categoryChip: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, minHeight: 36, justifyContent: "center" },
+  categoryText: { fontSize: 14 },
+  categoryTextOn: { fontWeight: "700" },
 });

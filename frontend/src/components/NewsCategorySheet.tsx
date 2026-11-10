@@ -74,7 +74,7 @@ function DraggableRow({ label, rowHeight, canToggle, onToggle, drag, dragging, o
         accessibilityState={{ checked: true }}
       >
         <View style={[styles.checkbox, { borderColor: colors.tint, backgroundColor: colors.tint }]}>
-          <Text style={styles.check}>✓</Text>
+          <Text style={[styles.check, { color: colors.onTint }]}>✓</Text>
         </View>
         <Text style={[styles.label, { color: colors.text }]} numberOfLines={1}>{label}</Text>
       </TouchableOpacity>
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   },
   toggleArea: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12, alignSelf: "stretch" },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
-  check: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  check: { fontSize: 13, fontWeight: "700" },
   label: { flexShrink: 1, fontSize: 15, fontWeight: "500" },
   // 손잡이는 손가락으로 잡기 쉽게 넉넉한 크기로 둔다
   grip: { width: 44, alignSelf: "stretch", alignItems: "center", justifyContent: "center", gap: 4 },

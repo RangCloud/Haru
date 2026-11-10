@@ -152,25 +152,25 @@ export function BudgetPeriodSheet({ visible, onClose, colors }: BudgetPeriodShee
       accessibilityRole="button"
       accessibilityState={{ disabled: !draftRange }}
     >
-      <Text style={styles.applyText}>이 기간 보기</Text>
+      <Text style={[styles.applyText, { color: colors.onTint }]}>이 기간 보기</Text>
     </TouchableOpacity>
   ) : undefined;
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="기간 선택" colors={colors} footer={footer}>
       {/* 월 단위 / 기간 직접 선택 */}
-      <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[styles.segment, { backgroundColor: colors.segment }]}>
         {([["month", "월 단위"], ["range", "기간 직접 선택"]] as const).map(([value, label]) => {
           const on = tab === value;
           return (
             <TouchableOpacity
               key={value}
               onPress={() => setTab(value)}
-              style={[styles.segmentBtn, on && { backgroundColor: colors.tint }]}
+              style={[styles.segmentBtn, on && [styles.segmentBtnOn, { backgroundColor: colors.card }]]}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
             >
-              <Text style={[styles.segmentText, { color: on ? "#fff" : colors.subtext }]}>{label}</Text>
+              <Text style={[styles.segmentText, on ? { color: colors.text, fontWeight: "700" } : { color: colors.subtext }]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -207,7 +207,7 @@ export function BudgetPeriodSheet({ visible, onClose, colors }: BudgetPeriodShee
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={`${year}년 ${m}월${isCurrent ? ", 이번 달" : ""}`}
                   >
-                    <Text style={[styles.monthText, { color: on ? "#fff" : isCurrent ? colors.tint : colors.text }]}>{m}월</Text>
+                    <Text style={[styles.monthText, { color: on ? colors.onTint : isCurrent ? colors.tint : colors.text }]}>{m}월</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -337,16 +337,20 @@ function StartDayCell({ label, on, wide, onPress, colors, a11y }: {
         accessibilityState={{ selected: on }}
         accessibilityLabel={`한 달 시작일 ${a11y}`}
       >
-        <Text style={[styles.dayText, { color: on ? "#fff" : wide ? colors.subtext : colors.text }, on && styles.bold]}>{label}</Text>
+        <Text style={[styles.dayText, { color: on ? colors.onTint : wide ? colors.subtext : colors.text }, on && styles.bold]}>{label}</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden" },
-  segmentBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
-  segmentText: { fontSize: 14, fontWeight: "600" },
+  // 구간 선택(시안 1) — 회색 바탕 안에서 고른 칸만 흰 바탕
+  segment: { flexDirection: "row", borderRadius: 12, padding: 3 },
+  segmentBtn: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 9 },
+  segmentBtnOn: {
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  segmentText: { fontSize: 14, fontWeight: "500" },
   yearRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 28 },
   arrow: { fontSize: 30, fontWeight: "300", paddingHorizontal: 8 },
   year: { fontSize: 20, fontWeight: "700", minWidth: 90, textAlign: "center", fontVariant: ["tabular-nums"] },
@@ -381,5 +385,5 @@ const styles = StyleSheet.create({
   calHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
   calTitle: { fontSize: 15, fontWeight: "700" },
   applyBtn: { borderRadius: 14, paddingVertical: 14, alignItems: "center" },
-  applyText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  applyText: { fontSize: 16, fontWeight: "700" },
 });

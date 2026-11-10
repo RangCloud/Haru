@@ -68,7 +68,7 @@ export function DateJumpSheet({ visible, onClose, selectedDate, onJump, colors }
                 accessibilityState={{ selected: on }}
                 accessibilityLabel={`${year}년 ${m}월`}
               >
-                <Text style={[styles.monthText, { color: on ? "#fff" : colors.text }]}>{m}월</Text>
+                <Text style={[styles.monthText, { color: on ? colors.onTint : colors.text }]}>{m}월</Text>
               </TouchableOpacity>
             );
           })}

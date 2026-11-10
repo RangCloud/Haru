@@ -37,7 +37,7 @@ interface TodoAddSheetProps {
   colors: typeof Colors.light;
 }
 
-const STAR_COLOR = "#F5B400";
+// (리디자인 시안 1) 중요 표시는 목록에서 파란 테두리 + '중요' 글자로 보이므로, 추가 창의 별도 같은 파랑(tint)을 쓴다
 
 export function TodoAddSheet({ visible, onClose, editTarget, colors }: TodoAddSheetProps) {
   const { add, addRoutine, updateTodo, updateRoutineFields } = useTodoStore();
@@ -96,25 +96,28 @@ export function TodoAddSheet({ visible, onClose, editTarget, colors }: TodoAddSh
       colors={colors}
       footer={
         <TouchableOpacity
-          style={[styles.submit, { backgroundColor: canSubmit ? colors.tint : colors.separator }]}
+          // 못 누를 때는 흐린 파랑 — 예전 회색(separator) 바탕 위 흰 글자는 대비가 1.2:1이라 글자가 안 보였다
+          style={[styles.submit, { backgroundColor: colors.tint, opacity: canSubmit ? 1 : 0.4 }]}
           onPress={submit}
           disabled={!canSubmit}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSubmit }}
         >
-          <Text style={styles.submitText}>{isEdit ? "저장하기" : "추가하기"}</Text>
+          <Text style={[styles.submitText, { color: colors.onTint }]}>{isEdit ? "저장하기" : "추가하기"}</Text>
         </TouchableOpacity>
       }
     >
       {/* 종류 — 추가할 때만 고를 수 있다 */}
       {!isEdit && (
-        <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <View style={[styles.segment, { backgroundColor: colors.segment }]}>
           {(["todo", "routine"] as const).map((m) => (
             <TouchableOpacity
               key={m}
-              style={[styles.segmentBtn, mode === m && { backgroundColor: colors.tint }]}
+              style={[styles.segmentBtn, mode === m && [styles.segmentBtnOn, { backgroundColor: colors.card }]]}
               onPress={() => setMode(m)}
               accessibilityState={{ selected: mode === m }}
             >
-              <Text style={[styles.segmentText, { color: mode === m ? "#fff" : colors.subtext }]}>
+              <Text style={[styles.segmentText, mode === m ? { color: colors.text, fontWeight: "700" } : { color: colors.subtext }]}>
                 {m === "todo" ? "할 일" : "↻ 고정 루틴"}
               </Text>
             </TouchableOpacity>
@@ -155,7 +158,7 @@ export function TodoAddSheet({ visible, onClose, editTarget, colors }: TodoAddSh
                   style={[styles.day, { borderColor: on ? colors.tint : colors.separator, backgroundColor: on ? colors.tint : colors.card }]}
                   accessibilityLabel={`${w}요일 ${on ? "선택됨" : "선택 안 됨"}`}
                 >
-                  <Text style={[styles.dayText, { color: on ? "#fff" : i === 0 ? colors.expense : colors.text }]}>{w}</Text>
+                  <Text style={[styles.dayText, { color: on ? colors.onTint : i === 0 ? colors.sunday : colors.text }]}>{w}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -175,12 +178,12 @@ export function TodoAddSheet({ visible, onClose, editTarget, colors }: TodoAddSh
 
       {/* 중요 표시 */}
       <TouchableOpacity
-        style={[styles.importantRow, { borderColor: important ? STAR_COLOR : colors.separator, backgroundColor: colors.card }]}
+        style={[styles.importantRow, { borderColor: important ? colors.tint : colors.separator, backgroundColor: colors.card }]}
         onPress={() => setImportant((v) => !v)}
         accessibilityRole="switch"
         accessibilityState={{ checked: important }}
       >
-        <IconSymbol name="star.fill" size={18} color={important ? STAR_COLOR : colors.separator} />
+        <IconSymbol name="star.fill" size={18} color={important ? colors.tint : colors.faint} />
         <View style={styles.importantText}>
           <Text style={[styles.importantTitle, { color: colors.text }]}>중요 표시</Text>
           <Text style={[styles.importantSub, { color: colors.subtext }]}>목록 맨 위에 별과 함께 보여줘요</Text>
@@ -194,9 +197,13 @@ export function TodoAddSheet({ visible, onClose, editTarget, colors }: TodoAddSh
 }
 
 const styles = StyleSheet.create({
-  segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden", marginBottom: 4 },
-  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: "center" },
-  segmentText: { fontSize: 14, fontWeight: "600" },
+  // 구간 선택(시안 1) — 회색 바탕 안에서 고른 칸만 흰 바탕
+  segment: { flexDirection: "row", borderRadius: 12, padding: 3, marginBottom: 4 },
+  segmentBtn: { flex: 1, minHeight: 40, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  segmentBtnOn: {
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  segmentText: { fontSize: 14, fontWeight: "500" },
   label: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
   hint: { fontSize: 12, lineHeight: 17 },
@@ -213,5 +220,5 @@ const styles = StyleSheet.create({
   knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" },
   knobOn: { alignSelf: "flex-end" },
   submit: { paddingVertical: 16, borderRadius: 14, alignItems: "center" },
-  submitText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  submitText: { fontSize: 16, fontWeight: "700" },
 });

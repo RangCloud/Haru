@@ -133,7 +133,7 @@ export function HourMinuteInput({ hour, minute, onChange, disabled = false, minu
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={`${n}${open === "hour" ? "시" : "분"}`}
                   >
-                    <Text style={[styles.optionText, { color: on ? "#fff" : colors.text }]}>{pad(n)}</Text>
+                    <Text style={[styles.optionText, { color: on ? colors.onTint : colors.text }]}>{pad(n)}</Text>
                   </TouchableOpacity>
                 );
               })}

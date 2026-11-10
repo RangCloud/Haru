@@ -273,9 +273,10 @@ function ScheduleModal({ visible, initialDate, onClose, onSubmit, colors, initia
       onClose={onClose}
       title={isEdit ? "일정 수정" : "일정 추가"}
       colors={colors}
+      // 버튼은 주 색 — 예전처럼 고른 일정 색으로 칠하면 노랑·하늘색 위 흰 글자 대비가 2:1 정도로 낮았다
       footer={
-        <TouchableOpacity style={[styles.submitBtn, { backgroundColor: color }]} onPress={handleSubmit}>
-          <Text style={styles.submitBtnText}>{isEdit ? "수정하기" : "추가하기"}</Text>
+        <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.tint }]} onPress={handleSubmit} accessibilityRole="button">
+          <Text style={[styles.submitBtnText, { color: colors.onTint }]}>{isEdit ? "수정하기" : "추가하기"}</Text>
         </TouchableOpacity>
       }
     >
@@ -757,8 +758,8 @@ const styles = StyleSheet.create({
   // ── 시트 공통 ─────────────────────────────────────────────
   fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-  submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: "center" },
-  submitBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  submitBtn: { minHeight: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  submitBtnText: { fontSize: 16, fontWeight: "700" },
   // ── 한눈에 보기 ───────────────────────────────────────────
   detailCard: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
   detailHeader: { flexDirection: "row", justifyContent: "space-between" },
