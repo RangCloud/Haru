@@ -102,7 +102,7 @@ export function SpendingHeatCalendar({ range, expenseByDate, selectedDate, today
                       onPress={() => onSelectDate(isSelected ? null : date)}
                       style={({ pressed }) => [
                         styles.cell,
-                        { height: 30 * scale, backgroundColor: background, borderColor: isSelected ? colors.tint : "transparent" },
+                        { height: 32 * scale, backgroundColor: background, borderColor: isSelected ? colors.tint : "transparent" },
                         pressed && styles.pressed,
                       ]}
                       // 칸이 작으므로 눌리는 영역을 위아래로 조금 넓힌다 (옆 칸과는 겹치지 않게 세로만)
@@ -137,12 +137,13 @@ export function SpendingHeatCalendar({ range, expenseByDate, selectedDate, today
 const styles = StyleSheet.create({
   row: { flexDirection: "row" },
   monthLabel: { fontSize: 11, fontWeight: "700", paddingTop: 4, paddingBottom: 2, paddingLeft: 2 },
-  weekday: { flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", paddingBottom: 4 },
+  weekday: { flex: 1, textAlign: "center", fontSize: 12, fontWeight: "600", paddingBottom: 6 },
   // 칸 사이 간격은 바깥 틀의 안쪽 여백으로 만든다 (gap을 쓰면 7칸 너비 계산이 기기마다 달라질 수 있다)
   cellSlot: { flex: 1, padding: 1.5 },
-  cell: { borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  // 시안 1: 둥근 네모 칸(모서리 8). 지출 많은 날일수록 지출 빨강이 진해진다
+  cell: { borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   pressed: { opacity: 0.6 },
-  dayText: { fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  dayText: { fontSize: 12.5, fontVariant: ["tabular-nums"] },
   future: { opacity: 0.55 },
   todayText: { fontWeight: "800" },
 });

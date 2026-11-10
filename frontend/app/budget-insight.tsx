@@ -8,6 +8,8 @@
  *
  * 계산은 모두 기기 안에서만 한다 (src/utils/spendingInsight.ts).
  * 가계부 내역을 서버나 AI로 보내지 않는다 — CLAUDE.md §4 로컬 우선 원칙.
+ *
+ * 2026-11 리디자인(시안 1): 그림자 없는 묶음 카드, 회색 바탕 구간 선택.
  */
 
 import { router } from "expo-router";
@@ -15,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Colors, cardShadow } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
 import { formatAmount } from "@/src/components/BudgetModal";
@@ -82,7 +84,6 @@ export default function BudgetInsightScreen() {
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.back}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           accessibilityRole="button"
           accessibilityLabel="뒤로"
         >
@@ -93,17 +94,19 @@ export default function BudgetInsightScreen() {
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
         {/* 단위 선택 */}
-        <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {/* 구간 선택(시안 1): 회색 바탕 안에서 고른 칸만 흰 바탕 + 굵은 글자 */}
+        <View style={[styles.segment, { backgroundColor: colors.segment }]}>
           {UNITS.map((u) => {
             const on = u.value === unit;
             return (
               <TouchableOpacity
                 key={u.value}
                 onPress={() => setUnit(u.value)}
-                style={[styles.segmentBtn, on && { backgroundColor: colors.tint }]}
+                style={[styles.segmentBtn, on && [styles.segmentBtnOn, { backgroundColor: colors.card }]]}
+                accessibilityRole="button"
                 accessibilityState={{ selected: on }}
               >
-                <Text style={[styles.segmentText, { color: on ? "#fff" : colors.subtext }]}>{u.label}</Text>
+                <Text style={[styles.segmentText, on ? { color: colors.text, fontWeight: "700" } : { color: colors.subtext }]}>{u.label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -113,7 +116,8 @@ export default function BudgetInsightScreen() {
         <View style={styles.periodRow}>
           <TouchableOpacity
             onPress={() => setAnchor(shiftAnchor(unit, anchor, -1, monthStartDay))}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.arrowBtn}
+            accessibilityRole="button"
             accessibilityLabel="이전 기간"
           >
             <Text style={[styles.arrow, { color: colors.tint }]}>‹</Text>
@@ -122,17 +126,18 @@ export default function BudgetInsightScreen() {
           <TouchableOpacity
             onPress={() => setAnchor(shiftAnchor(unit, anchor, 1, monthStartDay))}
             disabled={!canGoNext}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.arrowBtn}
+            accessibilityRole="button"
             accessibilityLabel="다음 기간"
           >
-            <Text style={[styles.arrow, { color: canGoNext ? colors.tint : colors.separator }]}>›</Text>
+            <Text style={[styles.arrow, { color: canGoNext ? colors.tint : colors.faint }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {insight && (
           <>
             {/* 총 지출 */}
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
               <Text style={[styles.cardLabel, { color: colors.subtext }]}>총 지출</Text>
               <Text style={[styles.total, { color: colors.text }]}>{formatAmount(insight.expense)}</Text>
               {insight.prevExpense > 0 || insight.expense > 0 ? (
@@ -157,7 +162,7 @@ export default function BudgetInsightScreen() {
 
             {/* 카테고리별 지출 */}
             {insight.categories.length > 0 && (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                 <Text style={[styles.cardLabel, { color: colors.subtext }]}>카테고리별 지출</Text>
                 {insight.categories.map((c, i) => (
                   <View key={c.category} style={styles.catRow}>
@@ -182,7 +187,7 @@ export default function BudgetInsightScreen() {
 
             {/* 한마디 */}
             {insight.messages.length > 0 && (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                 <Text style={[styles.cardLabel, { color: colors.subtext }]}>한마디</Text>
                 {insight.messages.map((m) => (
                   <View key={m} style={styles.msgRow}>
@@ -227,35 +232,40 @@ function CompareBar({ label, amount, max, color, colors }: {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { alignItems: "center", justifyContent: "center", paddingHorizontal: 24, paddingBottom: 12 },
-  back: { position: "absolute", left: 16, bottom: 8 },
+  // 뒤로 — 터치 영역 44×44
+  back: { position: "absolute", left: 8, bottom: 8, width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   backText: { fontSize: 32, fontWeight: "300" },
   title: { fontSize: 18, fontWeight: "700", paddingVertical: 8 },
-  content: { paddingHorizontal: 24, gap: 12 },
-  segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden" },
-  segmentBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
-  segmentText: { fontSize: 14, fontWeight: "600" },
-  periodRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16 },
-  arrow: { fontSize: 28, fontWeight: "300", paddingHorizontal: 6 },
-  periodLabel: { fontSize: 15, fontWeight: "700", minWidth: 150, textAlign: "center" },
-  card: { borderRadius: 16, borderWidth: 1, padding: 18, gap: 10 },
-  cardLabel: { fontSize: 13, fontWeight: "600" },
+  content: { paddingHorizontal: 20, gap: 12 },
+  segment: { flexDirection: "row", borderRadius: 12, padding: 3 },
+  segmentBtn: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 38, borderRadius: 9 },
+  segmentBtnOn: {
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  segmentText: { fontSize: 14, fontWeight: "500" },
+  periodRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  arrowBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  arrow: { fontSize: 28, fontWeight: "300" },
+  periodLabel: { fontSize: 16, fontWeight: "700", minWidth: 150, textAlign: "center" },
+  card: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 10 },
+  cardLabel: { fontSize: 15, fontWeight: "700" },
   total: { fontSize: 24, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  delta: { fontSize: 12, fontWeight: "700", marginTop: -4 },
+  delta: { fontSize: 13, fontWeight: "700", marginTop: -4 },
   empty: { fontSize: 13 },
   // 글자가 커져도 금액이 잘리지 않도록 이름·금액을 막대 위 한 줄에 두고 막대는 그 아래 전체 폭으로 그린다
   cmpRow: { gap: 4 },
   cmpHead: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-  cmpLabel: { flexShrink: 1, fontSize: 11 },
-  cmpAmount: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  cmpLabel: { flexShrink: 1, fontSize: 12 },
+  cmpAmount: { fontSize: 12, fontVariant: ["tabular-nums"] },
   catRow: { gap: 5 },
   catHead: { flexDirection: "row", alignItems: "baseline", gap: 8 },
-  catName: { flex: 1, fontSize: 13, fontWeight: "500" },
-  catAmount: { fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] },
-  catPercent: { fontSize: 11, minWidth: 30, textAlign: "right", fontVariant: ["tabular-nums"] },
+  catName: { flex: 1, fontSize: 14, fontWeight: "500" },
+  catAmount: { fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  catPercent: { fontSize: 12, minWidth: 32, textAlign: "right", fontVariant: ["tabular-nums"] },
   track: { height: 8, borderRadius: 4, overflow: "hidden" },
   fill: { height: 8, borderRadius: 4 },
   msgRow: { flexDirection: "row", gap: 8 },
   msgDot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 7 },
-  msgText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  local: { fontSize: 11, textAlign: "center" },
+  msgText: { flex: 1, fontSize: 14, lineHeight: 21 },
+  local: { fontSize: 12, textAlign: "center" },
 });

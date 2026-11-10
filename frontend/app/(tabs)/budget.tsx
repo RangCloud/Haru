@@ -10,6 +10,9 @@
  * - 날짜별 지출 달력: 많이 쓴 날일수록 칸이 진해지고, 날짜를 누르면 아래 내역이 그날로 좁혀진다
  * - 달력 카드의 '소비 분석'을 누르면 주·달·년 단위 분석 화면으로 이동
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
+ *
+ * 2026-11 리디자인(시안 1): 그림자 없는 묶음 카드, 회색 바탕 구간 선택, 날짜마다 카드 하나.
+ * 수입·지출은 금액·추가 버튼 모두 초록/빨강으로 맞춰 한눈에 구분한다(사용자 요청).
  */
 
 import { router } from "expo-router";
@@ -17,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Colors, cardShadow } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
 import { BudgetModal, formatAmount, TransactionRow } from "@/src/components/BudgetModal";
@@ -120,10 +123,12 @@ export default function BudgetScreen() {
           </Text>
           {rangeText && <Text style={[styles.rangeLabel, { color: colors.tint }]}>{rangeText}</Text>}
         </TouchableOpacity>
+        {/* 이번 달 — 시안 1처럼 테두리 없는 글자 버튼. 이미 이번 달이면 흐리게 */}
         <TouchableOpacity
           onPress={loadCurrentPeriod}
           disabled={isCurrent}
-          style={[styles.thisMonthBtn, { borderColor: colors.tint, opacity: isCurrent ? 0.4 : 1 }]}
+          style={[styles.thisMonthBtn, { opacity: isCurrent ? 0.4 : 1 }]}
+          accessibilityRole="button"
           accessibilityLabel="이번 달로 이동"
         >
           <Text style={[styles.thisMonthText, { color: colors.tint }]}>이번 달</Text>
@@ -132,12 +137,11 @@ export default function BudgetScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* 요약 — 홈 카드와 같은 구성 */}
-        <View style={[styles.summary, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+        <View style={[styles.summary, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryCaption, { color: colors.subtext }]}>수입 총액</Text>
             <Text style={[styles.summaryValue, { color: colors.income }]}>{formatAmount(homeIncome)}</Text>
           </View>
-          <View style={[styles.divider, { backgroundColor: colors.separator }]} />
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryCaption, { color: colors.subtext }]}>지출 총액</Text>
             <Text style={[styles.summaryValue, { color: colors.expense }]}>{formatAmount(homeExpense)}</Text>
@@ -145,16 +149,16 @@ export default function BudgetScreen() {
         </View>
 
         {/* 날짜별 지출 달력 — 많이 쓴 날이 진하게 보인다. 소비 분석 진입도 이 카드에 둔다 */}
-        <View style={[styles.calendarCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+        <View style={[styles.calendarCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <View style={styles.calendarHeader}>
-            <Text style={[styles.calendarTitle, { color: colors.subtext }]}>날짜별 지출</Text>
+            <Text style={[styles.calendarTitle, { color: colors.text }]}>날짜별 지출</Text>
             <TouchableOpacity
               onPress={() => router.push("/budget-insight")}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
               accessibilityLabel="소비 분석 보기"
             >
-              <Text style={[styles.calendarLink, { color: colors.tint }]}>소비 분석 →</Text>
+              <Text style={[styles.calendarLink, { color: colors.tint }]}>소비 분석</Text>
             </TouchableOpacity>
           </View>
           <SpendingHeatCalendar
@@ -176,27 +180,30 @@ export default function BudgetScreen() {
 
         {/* 필터 + 추가 버튼 */}
         <View style={styles.toolbar}>
-          <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          {/* 구간 선택(시안 1): 회색 바탕 안에서 고른 칸만 흰 바탕 + 굵은 글자 — 색만으로 구분하지 않는다 */}
+          <View style={[styles.segment, { backgroundColor: colors.segment }]}>
             {FILTERS.map((f) => {
               const on = f.value === filter;
               return (
                 <TouchableOpacity
                   key={f.value}
                   onPress={() => setFilter(f.value)}
-                  style={[styles.segmentBtn, on && { backgroundColor: colors.tint }]}
+                  style={[styles.segmentBtn, on && [styles.segmentBtnOn, { backgroundColor: colors.card }]]}
+                  accessibilityRole="button"
                   accessibilityState={{ selected: on }}
                 >
-                  <Text style={[styles.segmentText, { color: on ? "#fff" : colors.subtext }]}>{f.label}</Text>
+                  <Text style={[styles.segmentText, on ? { color: colors.text, fontWeight: "700" } : { color: colors.subtext }]}>{f.label}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
+          {/* 추가 버튼 — 지출 빨강 / 수입 초록으로 한눈에 구분(사용자 요청). 글자는 onTint(라이트 흰색·다크 진한색) */}
           <View style={styles.addGroup}>
-            <TouchableOpacity onPress={() => openAdd("expense")} style={[styles.addBtn, { backgroundColor: colors.expense }]}>
-              <Text style={styles.addText}>+ 지출</Text>
+            <TouchableOpacity onPress={() => openAdd("expense")} style={[styles.addBtn, { backgroundColor: colors.expense }]} accessibilityRole="button">
+              <Text style={[styles.addText, { color: colors.onTint }]}>지출 추가</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => openAdd("income")} style={[styles.addBtn, { backgroundColor: colors.income }]}>
-              <Text style={styles.addText}>+ 수입</Text>
+            <TouchableOpacity onPress={() => openAdd("income")} style={[styles.addBtn, { backgroundColor: colors.income }]} accessibilityRole="button">
+              <Text style={[styles.addText, { color: colors.onTint }]}>수입 추가</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -209,15 +216,16 @@ export default function BudgetScreen() {
               {selectedDate ? formatMonthDay(selectedDate) : homeCustom ? "이 기간" : `${month}월`}
               {filter === "all" ? " 내역이 없습니다." : ` ${filter === "income" ? "수입" : "지출"} 내역이 없습니다.`}
             </Text>
-            <Text style={[styles.emptyHint, { color: colors.subtext }]}>+ 지출 · + 수입 버튼으로 추가하세요</Text>
+            <Text style={[styles.emptyHint, { color: colors.subtext }]}>지출 추가 · 수입 추가 버튼으로 넣을 수 있어요</Text>
           </View>
         ) : (
           groups.map(([date, items]) => {
             const dayIncome = items.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
             const dayExpense = items.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
             return (
-              <View key={date} style={styles.group}>
-                <View style={styles.groupHeader}>
+              // 날짜마다 묶음 카드 하나 — 맨 위 줄에 날짜와 그날 합계, 아래로 거래 줄
+              <View key={date} style={[styles.group, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                <View style={[styles.groupHeader, { borderBottomColor: colors.separator }]}>
                   <Text style={[styles.groupDate, { color: colors.subtext }]}>
                     {formatMonthDay(date)}{date === today ? " · 오늘" : ""}
                   </Text>
@@ -226,11 +234,12 @@ export default function BudgetScreen() {
                     {dayExpense > 0 && <Text style={[styles.groupSumText, { color: colors.expense }]}>-{formatAmount(dayExpense)}</Text>}
                   </View>
                 </View>
-                {items.map((t) => (
+                {items.map((t, i) => (
                   <TransactionRow
                     key={t.id}
                     item={t}
                     colors={colors}
+                    first={i === 0}
                     onDelete={() => remove(t.id)}
                     onEdit={() => { setEditing(t); setModalVisible(true); }}
                   />
@@ -271,33 +280,41 @@ const styles = StyleSheet.create({
   monthLabel: { fontSize: 20, fontWeight: "700" },
   rangeLabel: { fontSize: 12.5, fontWeight: "600", marginTop: 1 },
   caret: { fontSize: 14 },
-  thisMonthBtn: { position: "absolute", right: 20, bottom: 20, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
-  thisMonthText: { fontSize: 12, fontWeight: "600" },
-  content: { paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
-  summary: { flexDirection: "row", alignItems: "center", borderRadius: 16, borderWidth: 1, paddingVertical: 18 },
-  summaryItem: { flex: 1, alignItems: "center", gap: 5 },
-  summaryCaption: { fontSize: 11 },
-  summaryValue: { fontSize: 17, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  divider: { width: 1, height: 34 },
+  // 이번 달 — 글자 버튼, 높이 44로 터치 영역 확보
+  thisMonthBtn: { position: "absolute", right: 12, bottom: 12, height: 44, paddingHorizontal: 8, justifyContent: "center" },
+  thisMonthText: { fontSize: 15, fontWeight: "600" },
+  content: { paddingHorizontal: 20, paddingBottom: 32, gap: 12 },
+  // 요약 — 시안 1: 두 칸 모두 왼쪽 정렬, 큰 금액
+  summary: { flexDirection: "row", borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 16 },
+  summaryItem: { flex: 1, gap: 4 },
+  summaryCaption: { fontSize: 13 },
+  summaryValue: { fontSize: 20, fontWeight: "700", letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
   calendarCard: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 14, gap: 8 },
   calendarHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 },
-  calendarTitle: { fontSize: 13, fontWeight: "600" },
-  calendarLink: { fontSize: 13 },
-  calendarReset: { fontSize: 12, fontWeight: "600", textAlign: "center", paddingTop: 2 },
+  calendarTitle: { fontSize: 15, fontWeight: "700" },
+  calendarLink: { fontSize: 14, fontWeight: "500" },
+  calendarReset: { fontSize: 13, fontWeight: "600", textAlign: "center", paddingTop: 2 },
   toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  segment: { flexDirection: "row", borderRadius: 12, borderWidth: 1, overflow: "hidden" },
-  segmentBtn: { paddingHorizontal: 14, paddingVertical: 8 },
-  segmentText: { fontSize: 13, fontWeight: "600" },
+  segment: { flexDirection: "row", borderRadius: 12, padding: 3 },
+  segmentBtn: { paddingHorizontal: 14, minHeight: 38, borderRadius: 9, justifyContent: "center" },
+  segmentBtnOn: {
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  segmentText: { fontSize: 14, fontWeight: "500" },
   addGroup: { flexDirection: "row", gap: 6 },
-  addBtn: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
-  addText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  group: { gap: 0 },
-  groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 8, paddingBottom: 2 },
-  groupDate: { fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
+  addBtn: { borderRadius: 12, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
+  addText: { fontSize: 14, fontWeight: "700" },
+  // 날짜 묶음 카드
+  group: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 16 },
+  groupHeader: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  groupDate: { fontSize: 13, fontWeight: "600" },
   groupSum: { flexDirection: "row", gap: 8 },
-  groupSumText: { fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  groupSumText: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
   empty: { alignItems: "center", paddingVertical: 48, gap: 6 },
   emptyText: { fontSize: 15 },
   emptyHint: { fontSize: 13 },
-  hint: { fontSize: 11, textAlign: "center", paddingTop: 4 },
+  hint: { fontSize: 12, textAlign: "center", paddingTop: 4 },
 });
