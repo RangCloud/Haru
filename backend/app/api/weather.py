@@ -14,9 +14,10 @@ GET /api/weather?lat=..&lon=.. 는 격자 방식 이전 빌드(테스터 기기)
 import logging
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.core.coordinates import GridXY, latlon_to_grid
+from app.core.rate_limit import RateLimitExceeded, client_key
 from app.schemas.weather import WeatherResponse
 from app.services.weather import get_weather
 
@@ -31,6 +32,7 @@ GRID_NY_MAX = 253
 
 @router.get("", response_model=WeatherResponse, summary="현재 지역 날씨 조회")
 async def fetch_weather(
+    request: Request,
     nx: int | None = Query(default=None, ge=1, le=GRID_NX_MAX, description="기상청 격자 X (예: 60 — 서울시청)"),
     ny: int | None = Query(default=None, ge=1, le=GRID_NY_MAX, description="기상청 격자 Y (예: 127)"),
     lat: float | None = Query(default=None, ge=-90, le=90, description="[이전 빌드 호환용] 위도"),
@@ -57,7 +59,10 @@ async def fetch_weather(
         raise HTTPException(status_code=422, detail="nx와 ny(기상청 격자)를 함께 보내 주세요.")
 
     try:
-        return await get_weather(grid)
+        return await get_weather(grid, client_key(request))
+    except RateLimitExceeded as e:
+        # 접속자 IP별 기상청 호출 한도 초과 (services/weather.py 참고)
+        raise HTTPException(status_code=429, detail=str(e))
     except ValueError as e:
         # 기상청 API 오류 또는 응답 파싱 실패
         raise HTTPException(status_code=502, detail=str(e))

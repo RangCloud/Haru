@@ -32,20 +32,25 @@ app = FastAPI(
     description="가계부 · 일정 · 날씨 · 뉴스 · 운세를 제공하는 백엔드",
     version="0.1.0",
     lifespan=lifespan,
+    # API 문서는 ENABLE_DOCS=true일 때만 — 운영에서는 끈다(내부 구조 노출 방지, 2026-11 보안 점검)
+    docs_url="/docs" if settings.enable_docs else None,
+    redoc_url="/redoc" if settings.enable_docs else None,
+    openapi_url="/openapi.json" if settings.enable_docs else None,
 )
 
 # ──────────────────────────────────────────────────────────────
-# CORS 설정
-# 개발 단계에서는 모든 오리진 허용.
-# 프로덕션 배포 시 cors_origins를 실제 앱 도메인으로 제한해야 한다.
+# CORS 설정 — 앱(iOS·Android)은 CORS와 무관하므로 기본은 붙이지 않는다.
+# 웹에서 개발할 때만 .env의 CORS_ORIGINS로 허용할 주소를 정한다.
+# 인증은 쿠키가 아니라 Authorization 헤더를 쓰므로 allow_credentials는 끈다.
 # ──────────────────────────────────────────────────────────────
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["*"],
+    )
 
 # ──────────────────────────────────────────────────────────────
 # 라우터 등록
@@ -54,7 +59,10 @@ app.add_middleware(
 app.include_router(weather.router, prefix="/api")
 app.include_router(news.router, prefix="/api")
 app.include_router(fortune.router, prefix="/api")
-app.include_router(social.router, prefix="/api")
+# 친구 API는 ENABLE_SOCIAL=true일 때만 연다 — v1.0 앱은 친구 탭을 숨겨 쓰지 않는다.
+# (DB 테이블 생성 init_db는 그대로 두어, 기존 친구 데이터 파일은 건드리지 않는다)
+if settings.enable_social:
+    app.include_router(social.router, prefix="/api")
 app.include_router(holiday.router, prefix="/api")
 
 

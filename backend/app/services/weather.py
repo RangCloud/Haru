@@ -18,6 +18,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.coordinates import GridXY
+from app.core.rate_limit import SlidingWindowLimiter
 from app.schemas.weather import HourlyWeather, WeatherResponse
 
 # ──────────────────────────────────────────────────────────────
@@ -30,6 +31,25 @@ KMA_BASE_URL = "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService
 # 서버 재시작 시 초기화된다. 트래픽이 많아지면 Redis로 교체 예정.
 # ──────────────────────────────────────────────────────────────
 _cache: dict[str, tuple[float, WeatherResponse]] = {}
+
+# 기상청을 실제로 부르는 횟수(캐시에 없을 때만)를 접속자 IP별로 제한한다 — 1시간에 30번.
+# 한 사람이 쓰는 격자는 보통 1~2개라 정상 사용으로는 닿지 않는다. 격자를 바꿔 가며 기상청 할당량을
+# 소진시키는 호출만 막는다(2026-11 보안 점검).
+_upstream_limiter = SlidingWindowLimiter(
+    max_calls=30,
+    window_sec=60 * 60,
+    message="날씨 요청이 너무 많아요. 잠시 후 다시 시도해 주세요.",
+)
+
+
+def _prune_cache(now: float) -> None:
+    """
+    유효 시간(TTL)이 지난 캐시를 지운다.
+    예전에는 지우지 않아, 예보 기준 시각(3시간마다)이 바뀔 때마다 새 항목만 쌓여 서버 메모리가 계속 늘었다.
+    """
+    expired = [k for k, (saved_at, _) in _cache.items() if now - saved_at >= settings.weather_cache_ttl]
+    for k in expired:
+        del _cache[k]
 
 # 기상청 발표 시각은 한국시간 기준이다. 서버(Oracle Cloud) 시계는 UTC라서
 # datetime.now()를 그대로 쓰면 9시간 전 예보를 요청하게 된다.
@@ -118,7 +138,7 @@ def _parse_items(items: list[dict]) -> list[HourlyWeather]:
     return hourly
 
 
-async def get_weather(grid: GridXY) -> WeatherResponse:
+async def get_weather(grid: GridXY, client_key: str | None = None) -> WeatherResponse:
     """
     기상청 격자(nx, ny)를 받아 단기예보를 조회하고 정제된 응답을 반환한다.
 
@@ -126,6 +146,8 @@ async def get_weather(grid: GridXY) -> WeatherResponse:
     이 함수는 좌표를 전혀 다루지 않는다.
 
     캐시 키: 격자 좌표 + 예보 기준 시각 → 같은 격자의 같은 예보 시간대면 캐시 반환.
+    client_key: 접속자 IP(모르면 None) — 캐시에 없어 기상청을 부를 때만 IP별 한도를 센다.
+    한도를 넘으면 RateLimitExceeded(라우터에서 429).
     """
     now = datetime.now(KST)
     base_date, base_time = _get_base_time(now)
@@ -137,6 +159,10 @@ async def get_weather(grid: GridXY) -> WeatherResponse:
         saved_at, cached = _cache[cache_key]
         if time.time() - saved_at < settings.weather_cache_ttl:
             return cached
+
+    # 캐시에 없음 → 기상청을 실제로 부르기 전에 IP별 한도 확인, 지난 캐시 정리
+    _upstream_limiter.hit(client_key)
+    _prune_cache(time.time())
 
     # 기상청 API 호출
     params = {

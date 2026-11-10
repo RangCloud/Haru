@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 import anthropic
 
 from app.core.config import settings
+from app.core.rate_limit import SlidingWindowLimiter
 from app.schemas.fortune import FortuneResponse
 
 # 하루 Claude API 최대 실제 호출 횟수.
@@ -37,6 +38,16 @@ _cache: dict[str, tuple[float, FortuneResponse]] = {}
 
 # 일별 호출 카운터 — { "YYYY-MM-DD": 호출_횟수 }
 _daily_calls: dict[str, int] = {}
+
+# 접속자 IP별 AI 실제 호출 한도 — 24시간에 10번.
+# 위 DAILY_RATE_LIMIT는 서버 전체 공용이라, 한 사람이 생년월일을 바꿔 가며 150번 부르면
+# 그날 모든 사용자의 운세가 막혔다(2026-11 보안 점검). 정상 사용자는 하루 1~2번(생년월일 재설정 포함)이면 충분하다.
+# 같은 와이파이(가족·회사)를 쓰는 사람들은 IP가 같을 수 있어 넉넉히 10번으로 둔다.
+_ip_limiter = SlidingWindowLimiter(
+    max_calls=10,
+    window_sec=24 * 60 * 60,
+    message="오늘은 운세 요청이 너무 많아요. 내일 다시 시도해 주세요.",
+)
 
 
 def _today() -> str:
@@ -159,6 +170,7 @@ async def get_fortune(
     birth_day: int | None = None,
     birth_hour: int | None = None,
     birth_minute: int | None = None,
+    client_key: str | None = None,
 ) -> FortuneResponse:
     """
     오늘의 운세를 반환한다.
@@ -166,6 +178,7 @@ async def get_fortune(
     생년월일을 기반으로 개인화된 운세를 생성한다.
     캐시 히트: 같은 날 같은 생년월일 → 즉시 반환 (Claude 미호출, cached=True)
     캐시 미스: Claude 실제 호출 → 결과 캐시 저장 (cached=False)
+    client_key: 접속자 IP(모르면 None) — 캐시 미스일 때만 IP별 한도를 센다. 넘으면 RateLimitExceeded(RuntimeError).
     """
     today = _today()
     cache_key = _make_cache_key(birth_year, birth_month, birth_month_type, birth_day, birth_hour, birth_minute)
@@ -175,7 +188,12 @@ async def get_fortune(
         _, cached = _cache[cache_key]
         return cached.model_copy(update={"cached": True})
 
-    # 레이트 리밋 확인 + 카운터 증가
+    # 1) IP별 한도 먼저 — 막힌 사람의 요청이 서버 전체 한도를 깎지 않도록 전체 카운터보다 앞에서 확인한다
+    _ip_limiter.hit(client_key)
+    # 2) 지난 날짜 캐시 정리 — 캐시 키 앞에 날짜가 붙으므로 오늘 것만 남긴다(예전에는 지우지 않아 계속 쌓였다)
+    for key in [k for k in _cache if not k.startswith(f"{today}_")]:
+        del _cache[key]
+    # 3) 서버 전체 하루 한도 확인 + 카운터 증가
     _check_and_increment(today)
     _usage_logger.info("FORTUNE_AI_CALL %d/%d", _daily_calls[today], DAILY_RATE_LIMIT)
 
