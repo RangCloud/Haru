@@ -26,18 +26,19 @@ export function formatAmount(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
 }
 
-/** '#RRGGBB' + 투명도 → 연한 배경색 */
-function withAlpha(hex: string, alpha: string): string {
-  return `${hex}${alpha}`;
-}
+// ── 거래 행 — 금액 색·부호로 수입·지출 구분, 길게 눌러 수정·삭제 ─────────
 
-// ── 거래 행 — 수입·지출 태그 색 구분, 길게 눌러 수정·삭제 ─────────
-
-export function TransactionRow({ item, colors, onDelete, onEdit }: {
+/**
+ * 거래 한 줄 — 시안 1: '카테고리 · 내용 · 금액'. 묶음 카드 안에 놓이고 줄 사이를 얇은 선으로 나눈다.
+ * 수입·지출은 금액 색(초록/빨강)과 +/− 부호 두 가지로 구분한다(색만으로 구분하지 않음).
+ * first: 카드의 첫 줄이면 위 구분선을 긋지 않는다(카드 테두리와 겹치지 않게).
+ */
+export function TransactionRow({ item, colors, onDelete, onEdit, first = false }: {
   item: Transaction;
   colors: ThemeColors;
   onDelete: () => void;
   onEdit: () => void;
+  first?: boolean;
 }) {
   const isIncome = item.type === "income";
   const tone = isIncome ? colors.income : colors.expense;
@@ -45,7 +46,7 @@ export function TransactionRow({ item, colors, onDelete, onEdit }: {
   const [menuVisible, setMenuVisible] = useState(false);
   return (
     <TouchableOpacity
-      style={[styles.txRow, { borderBottomColor: colors.separator }]}
+      style={[styles.txRow, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
       onLongPress={() => setMenuVisible(true)}
       activeOpacity={0.7}
     >
@@ -60,9 +61,7 @@ export function TransactionRow({ item, colors, onDelete, onEdit }: {
         ]}
         colors={colors}
       />
-      <View style={[styles.txBadge, { backgroundColor: withAlpha(tone, "1F") }]}>
-        <Text style={[styles.txBadgeText, { color: tone }]}>{isIncome ? "수입" : "지출"} · {item.category}</Text>
-      </View>
+      <Text style={[styles.txCategory, { color: colors.subtext }]} numberOfLines={1}>{item.category}</Text>
       <Text style={[styles.txNote, { color: colors.text }]} numberOfLines={1}>
         {item.note || item.category}
       </Text>
@@ -189,11 +188,11 @@ export function BudgetModal({ visible, initialDate, initialType = "expense", onC
 
 const styles = StyleSheet.create({
   // ── 거래 행 ───────────────────────────────────────────────
-  txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 10 },
-  txBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  txBadgeText: { fontSize: 11, fontWeight: "600" },
-  txNote: { flex: 1, fontSize: 14 },
-  txAmount: { fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  // 줄 높이 48 이상 — 길게 눌러 수정·삭제하는 줄이라 터치 영역을 넉넉히
+  txRow: { flexDirection: "row", alignItems: "center", minHeight: 48, paddingVertical: 12, gap: 12 },
+  txCategory: { fontSize: 13, width: 48 },
+  txNote: { flex: 1, fontSize: 15 },
+  txAmount: { fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"] },
   // ── 거래 시트 ─────────────────────────────────────────────
   fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },

@@ -6,8 +6,10 @@
  *   종일·여러 날 일정: 연한 색 띠. 여러 날 일정은 옆 칸과 띠를 이어 한 줄처럼 보이게 하고,
  *   제목은 첫날(또는 주가 바뀐 첫 칸)에만 쓴다.
  * - 칸을 넘는 제목은 한 줄에서 '…'로 자르고, 칸에 다 못 넣으면 '+N'.
- * - 선택한 날 = 칸 테두리 + 날짜 옆 작은 점, 오늘 = 굵은 인디고 숫자.
- *   (칸을 색으로 채우지 않아 일정 색·금액 색이 선택된 날에도 그대로 보인다)
+ * - 선택한 날 = 칸 테두리, 오늘 = 파란 동그라미 안 흰 숫자(시안 1).
+ *   (칸을 색으로 채우지 않아 일정 색·금액 색이 선택된 날에도 그대로 보인다.
+ *    오늘과 선택은 모양이 달라서 — 동그라미 / 칸 테두리 — 오늘을 고른 날에도 둘 다 보인다)
+ * - 요일·날짜 숫자는 칸 가운데 정렬(시안 1). 일요일·공휴일은 sunday, 토요일은 saturday 토큰 색.
  * - 수입·지출은 칸 아래 금액(−2.2만, +320만).
  * - 공휴일은 날짜를 빨간색으로, 옆에 공휴일 이름을 작게 쓴다 (예: 3 개천절).
  * - 앞뒤 달 날짜는 흐리게 채우고, 누르면 그 날짜로 이동한다.
@@ -20,7 +22,7 @@
  * 달력은 날짜를 누를 때마다 35~42칸이 한꺼번에 다시 그려지면서 누르지 않은 칸의 투명도가
  * 되돌아오지 않는 것으로 보인다(누른 칸만 애니메이션이 1로 끝나 보였다).
  * Pressable은 애니메이션 없이 눌린 동안만 스타일을 바꾸므로 이 문제가 생기지 않는다.
- * 같은 이유로 선택 테두리도 "있다/없다"로 바꾸지 않고, 항상 같은 두께로 두고 색만 투명 ↔ 인디고로 바꾼다
+ * 같은 이유로 선택 테두리도 "있다/없다"로 바꾸지 않고, 항상 같은 두께로 두고 색만 투명 ↔ 파랑으로 바꾼다
  * (테두리가 생기고 없어질 때 칸의 그리기 방식이 바뀌는 것을 피한다).
  *
  * 한 주씩 줄로 그린다 — 칸 너비를 '100/7 %' + 줄바꿈으로 두면 기기에 따라 날짜가 한 칸씩 밀렸다.
@@ -85,7 +87,7 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
     <View style={styles.calendar} {...panHandlers}>
       <View style={styles.weekRow}>
         {WEEKDAYS_KO.map((w, i) => (
-          <Text maxScale={CELL_MAX_SCALE} key={w} style={[styles.weekdayText, { color: i === 0 ? colors.expense : i === 6 ? "#3B82F6" : colors.subtext }]}>
+          <Text maxScale={CELL_MAX_SCALE} key={w} style={[styles.weekdayText, { color: i === 0 ? colors.sunday : i === 6 ? colors.saturday : colors.subtext }]}>
             {w}
           </Text>
         ))}
@@ -107,15 +109,15 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
             const hidden = events.length - shown.length;
 
             const holiday = cell.inMonth ? holidays[cell.date] : undefined;
-            // 오늘 표시가 가장 우선, 그다음 공휴일·일요일은 빨강, 토요일은 파랑
-            const numColor = isToday ? colors.tint : holiday || dow === 0 ? colors.expense : dow === 6 ? "#3B82F6" : colors.text;
+            // 오늘은 파란 동그라미 위 글자색, 그다음 공휴일·일요일·토요일 색
+            const numColor = isToday ? colors.onTint : holiday || dow === 0 ? colors.sunday : dow === 6 ? colors.saturday : colors.text;
 
             return (
               <Pressable
                 key={cell.date}
                 style={({ pressed }) => [
                   styles.cell,
-                  { height: 92 * scale, borderColor: isSelected ? colors.tint : "transparent" },
+                  { height: 96 * scale, borderColor: isSelected ? colors.tint : "transparent" },
                   !cell.inMonth && styles.outCell,
                   // 눌린 동안만 살짝 흐리게 — 앞뒤 달 칸은 이미 흐리므로 조금 더 흐리게 한다
                   pressed && (cell.inMonth ? styles.pressedCell : styles.pressedOutCell),
@@ -124,11 +126,19 @@ export function MonthCalendar({ year, month, selectedDate, today, marks, holiday
                 accessibilityLabel={`${cell.day}일${holiday ? `, ${holiday}` : ""}${isToday ? ", 오늘" : ""}${events.length ? `, 일정 ${events.length}개` : ""}`}
                 accessibilityState={{ selected: isSelected }}
               >
-                <View style={[styles.numRow, { height: 18 * scale }]}>
-                  <Text maxScale={CELL_MAX_SCALE} style={[styles.num, { color: numColor }, isToday && styles.numBold]}>{cell.day}</Text>
-                  {isSelected && <View style={[styles.selectedDot, { backgroundColor: colors.tint }]} />}
+                <View style={[styles.numRow, { height: 22 * scale }]}>
+                  {/* 오늘: 파란 동그라미 안 숫자 */}
+                  <View
+                    style={[
+                      styles.numCircle,
+                      { width: 22 * scale, height: 22 * scale, borderRadius: 11 * scale },
+                      isToday && { backgroundColor: colors.tint },
+                    ]}
+                  >
+                    <Text maxScale={CELL_MAX_SCALE} style={[styles.num, { color: numColor }, isToday && styles.numBold]}>{cell.day}</Text>
+                  </View>
                   {holiday && (
-                    <Text maxScale={CELL_MAX_SCALE} style={[styles.holidayName, { color: colors.expense }]} numberOfLines={1} ellipsizeMode="tail">
+                    <Text maxScale={CELL_MAX_SCALE} style={[styles.holidayName, { color: colors.sunday }]} numberOfLines={1} ellipsizeMode="tail">
                       {holiday}
                     </Text>
                   )}
@@ -197,22 +207,23 @@ const styles = StyleSheet.create({
   calendar: { paddingHorizontal: 6, marginBottom: 4, overflow: "hidden" },
   weekRow: { flexDirection: "row" },
   weekLine: { borderTopWidth: StyleSheet.hairlineWidth },
-  weekdayText: { flex: 1, fontSize: 11, fontWeight: "600", paddingLeft: 6, marginBottom: 4 },
+  weekdayText: { flex: 1, fontSize: 12, fontWeight: "600", textAlign: "center", marginBottom: 6 },
   // minWidth 0 + overflow hidden: 긴 제목이 칸을 밀어 넓히거나 옆 칸으로 넘어가지 않게 한다
   cell: {
-    flex: 1, minWidth: 0, height: 92, overflow: "hidden",
+    flex: 1, minWidth: 0, height: 96, overflow: "hidden",
     // 테두리(1.5)는 모든 칸에 항상 있고 색만 바뀐다 — 안쪽 여백은 테두리 두께를 뺀 값이다
     borderWidth: 1.5, paddingTop: 2.5, paddingBottom: 1.5, paddingHorizontal: 0.5, gap: 2, borderRadius: 9,
   },
   outCell: { opacity: 0.32 },
   pressedCell: { opacity: 0.6 },
   pressedOutCell: { opacity: 0.2 },
-  numRow: { flexDirection: "row", alignItems: "center", gap: 3, paddingLeft: 4, paddingRight: 2, height: 18 },
+  // 숫자는 가운데. 공휴일 이름이 있으면 숫자 옆에 붙고, 남는 폭만큼만 쓴다
+  numRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 2, paddingHorizontal: 2, height: 22 },
+  numCircle: { alignItems: "center", justifyContent: "center" },
   // 공휴일 이름은 남는 폭 안에서만 — 길면 '…'
   holidayName: { flexShrink: 1, fontSize: 8.5, fontWeight: "600" },
-  num: { fontSize: 12.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  num: { fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] },
   numBold: { fontWeight: "800" },
-  selectedDot: { width: 5, height: 5, borderRadius: 2.5 },
   timed: { fontSize: 9.5, lineHeight: 13, paddingLeft: 4, borderLeftWidth: 2 },
   band: { height: 14, justifyContent: "center", paddingHorizontal: 4 },
   // 칸 좌우 여백(2)만큼 띠를 늘려 옆 칸의 띠와 맞닿게 한다
@@ -222,6 +233,7 @@ const styles = StyleSheet.create({
   band_end: { borderTopRightRadius: 4, borderBottomRightRadius: 4, marginLeft: -2 },
   bandText: { fontSize: 9.5, fontWeight: "700" },
   more: { fontSize: 9, fontWeight: "700", paddingLeft: 4 },
-  money: { marginTop: "auto", alignItems: "flex-end", paddingRight: 3 },
+  // 금액은 칸 맨 아래 가운데 — 지출 빨강·수입 초록
+  money: { marginTop: "auto", alignItems: "center" },
   moneyText: { fontSize: 9, lineHeight: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
 });

@@ -9,6 +9,9 @@
  * 5. 날짜 바의 "+ 추가" → 일정 / 지출 / 수입
  *
  * 모든 데이터는 기기 로컬 SQLite에만 저장 (외부 전송 없음, CLAUDE.md §4).
+ *
+ * 2026-11 리디자인(시안 1): 월 제목 줄·날짜 바의 버튼과 동작은 그대로 두고(9/29 요청) 모양만 바꿨다.
+ * 그날 목록은 흰 묶음 카드 안에 '색 막대 · 제목 / 시간 · 오른쪽 색 이름' 줄로, 수입·지출은 별도 카드로 나눈다.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -46,11 +49,6 @@ type ThemeColors = (typeof Colors)["light"];
 
 
 // ── 유틸 ─────────────────────────────────────────────────────
-
-/** '#RRGGBB' + 투명도 → 연한 배경색 (라벨 칩용) */
-function withAlpha(hex: string, alpha: string): string {
-  return `${hex}${alpha}`;
-}
 
 /**
  * 달력 칸에 보여줄 날짜별 내용을 만든다.
@@ -165,13 +163,15 @@ function ColorPicker({
 
 // ── 일정 행 ───────────────────────────────────────────────────
 
-function ScheduleRow({ item, date, label, colors, onDelete, onEdit }: {
+function ScheduleRow({ item, date, label, colors, onDelete, onEdit, first = false }: {
   item: ScheduleItem;
   date: string;
   label?: string;
   colors: ThemeColors;
   onDelete: () => void;
   onEdit: () => void;
+  /** 카드의 첫 줄이면 위 구분선을 긋지 않는다 */
+  first?: boolean;
 }) {
   const barColor = item.color || colors.tint;
   // 길게 눌렀을 때 뜨는 수정·삭제 창 — Android에서도 취소할 수 있도록 시스템 알림창 대신 쓴다
@@ -181,9 +181,10 @@ function ScheduleRow({ item, date, label, colors, onDelete, onEdit }: {
 
   return (
     <TouchableOpacity
-      style={[styles.scheduleRow, { borderLeftColor: barColor }]}
+      style={[styles.scheduleRow, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
       onLongPress={() => setMenuVisible(true)}
       activeOpacity={0.7}
+      accessibilityHint="길게 눌러 수정하거나 삭제"
     >
       <ActionSheet
         visible={menuVisible}
@@ -196,22 +197,16 @@ function ScheduleRow({ item, date, label, colors, onDelete, onEdit }: {
         ]}
         colors={colors}
       />
+      {/* 왼쪽 색 막대 — 일정 색 */}
+      <View style={[styles.scheduleBar, { backgroundColor: barColor }]} />
       <View style={styles.scheduleMain}>
-        <View style={styles.scheduleTitleRow}>
-          {label ? (
-            <View style={[styles.labelPill, { backgroundColor: withAlpha(barColor, "22") }]}>
-              <Text style={[styles.labelPillText, { color: barColor }]}>{label}</Text>
-            </View>
-          ) : null}
-          <Text style={[styles.scheduleTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
-        </View>
-        {period || item.note ? (
-          <Text style={[styles.scheduleNote, { color: colors.subtext }]} numberOfLines={1}>
-            {[period, item.note].filter(Boolean).join(" · ")}
-          </Text>
-        ) : null}
+        <Text style={[styles.scheduleTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+        <Text style={[styles.scheduleNote, { color: colors.subtext }]} numberOfLines={1}>
+          {[timeLabel, period, item.note].filter(Boolean).join(" · ")}
+        </Text>
       </View>
-      <Text style={[styles.scheduleTime, { color: timeLabel === "종일" ? colors.subtext : barColor }]}>{timeLabel}</Text>
+      {/* 오른쪽: 색 이름(회사·운동 등) — 이름을 붙인 색일 때만 */}
+      {label ? <Text style={[styles.scheduleLabel, { color: colors.subtext }]} numberOfLines={1}>{label}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -492,8 +487,8 @@ export default function ScheduleScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       {/* 월 헤더 — 상단 안전 영역만큼 내려서 상태바와 겹치지 않게 (피드백 1번) */}
       <View style={[styles.monthHeader, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="이전 달">
-          <Text style={[styles.monthArrowText, { color: colors.tint }]}>‹</Text>
+        <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow} accessibilityLabel="이전 달">
+          <Text style={[styles.monthArrowText, { color: colors.subtext }]}>‹</Text>
         </TouchableOpacity>
         {/* 연·월을 누르면 날짜 이동 창 (수정 1번) */}
         <TouchableOpacity onPress={() => setJumpVisible(true)} accessibilityLabel={`${year}년 ${month}월, 눌러서 날짜 이동`}>
@@ -501,25 +496,27 @@ export default function ScheduleScreen() {
             {year}년 {month}월 <Text style={[styles.monthCaret, { color: colors.subtext }]}>▾</Text>
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} accessibilityLabel="다음 달">
-          <Text style={[styles.monthArrowText, { color: colors.tint }]}>›</Text>
+        <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow} accessibilityLabel="다음 달">
+          <Text style={[styles.monthArrowText, { color: colors.subtext }]}>›</Text>
         </TouchableOpacity>
-        {/* 왼쪽: 오늘 버튼 — 이미 오늘을 보고 있으면 흐리게 */}
+        {/* 왼쪽: 오늘 — 시안 1처럼 테두리 없는 글자 버튼. 이미 오늘을 보고 있으면 흐리게 */}
         <TouchableOpacity
           onPress={handleGoToday}
-          style={[styles.todayBtn, { borderColor: colors.tint, opacity: isToday && isThisMonth ? 0.4 : 1 }]}
+          style={[styles.todayBtn, { opacity: isToday && isThisMonth ? 0.4 : 1 }]}
           disabled={isToday && isThisMonth}
+          accessibilityRole="button"
           accessibilityLabel="오늘로 이동"
         >
           <Text style={[styles.todayBtnText, { color: colors.tint }]}>오늘</Text>
         </TouchableOpacity>
-        {/* 오른쪽: 추가 버튼 — 선택한 날짜에 일정·지출·수입 추가 */}
+        {/* 오른쪽: 추가 버튼 — 선택한 날짜에 일정·지출·수입 추가. 연한 파랑 보조 버튼 */}
         <TouchableOpacity
           onPress={handleFabPress}
-          style={[styles.addBtn, { backgroundColor: colors.tint }]}
+          style={[styles.addBtn, { backgroundColor: colors.tintLight }]}
+          accessibilityRole="button"
           accessibilityLabel={`${formatMonthDay(selectedDate)}에 추가`}
         >
-          <Text style={styles.addBtnText}>+ 추가</Text>
+          <Text style={[styles.addBtnText, { color: colors.tintStrong }]}>추가</Text>
         </TouchableOpacity>
       </View>
 
@@ -550,7 +547,8 @@ export default function ScheduleScreen() {
             <View style={styles.barActions}>
               <TouchableOpacity
                 onPress={() => setDetailVisible(true)}
-                style={[styles.detailBtn, { backgroundColor: colors.tintLight }]}
+                style={styles.detailBtn}
+                accessibilityRole="button"
                 accessibilityLabel="이 날짜 한눈에 보기"
               >
                 <Text style={[styles.detailBtnText, { color: colors.tint }]}>한눈에 보기 · {totalCount}</Text>
@@ -559,11 +557,11 @@ export default function ScheduleScreen() {
                   맨 위 월 제목 줄의 + 추가와 같은 동작이다 (선택한 날짜에 일정·지출·수입 추가) */}
               <TouchableOpacity
                 onPress={handleFabPress}
-                style={[styles.barAddBtn, { backgroundColor: colors.tint }]}
+                style={[styles.barAddBtn, { backgroundColor: colors.tintLight }]}
                 accessibilityRole="button"
                 accessibilityLabel="이 날짜에 일정 또는 가계부 추가"
               >
-                <Text style={styles.addBtnText}>+ 추가</Text>
+                <Text style={[styles.addBtnText, { color: colors.tintStrong }]}>추가</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -572,20 +570,22 @@ export default function ScheduleScreen() {
         {isLoaded && totalCount === 0 ? (
           <View style={styles.empty}>
             <Text style={[styles.emptyText, { color: colors.subtext }]}>일정·거래 내역이 없습니다.</Text>
-            <Text style={[styles.emptyHint, { color: colors.subtext }]}>+ 추가 버튼으로 추가하세요</Text>
+            <Text style={[styles.emptyHint, { color: colors.subtext }]}>추가 버튼으로 넣을 수 있어요</Text>
           </View>
         ) : (
           <View style={styles.listContent}>
             {selectedDateSchedules.length > 0 && (
               <>
                 <Text style={[styles.sectionTitle, { color: colors.subtext }]}>일정</Text>
-                {selectedDateSchedules.map((s) => (
-                  <ScheduleRow
-                    key={s.id} item={s} date={selectedDate} label={colorLabels[s.color]} colors={colors}
-                    onDelete={() => removeSchedule(s.id)}
-                    onEdit={() => { setEditSchedule(s); setScheduleModalVisible(true); }}
-                  />
-                ))}
+                <View style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                  {selectedDateSchedules.map((s, i) => (
+                    <ScheduleRow
+                      key={s.id} item={s} date={selectedDate} label={colorLabels[s.color]} colors={colors} first={i === 0}
+                      onDelete={() => removeSchedule(s.id)}
+                      onEdit={() => { setEditSchedule(s); setScheduleModalVisible(true); }}
+                    />
+                  ))}
+                </View>
               </>
             )}
 
@@ -599,13 +599,15 @@ export default function ScheduleScreen() {
                     {dayExpense > 0 && <Text style={[styles.daySummaryText, { color: colors.expense }]}>지출 -{formatAmount(dayExpense)}</Text>}
                   </View>
                 </View>
-                {selectedDateTransactions.map((t) => (
-                  <TransactionRow
-                    key={t.id} item={t} colors={colors}
-                    onDelete={() => removeTransaction(t.id)}
-                    onEdit={() => { setEditTransaction(t); setBudgetModalVisible(true); }}
-                  />
-                ))}
+                <View style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                  {selectedDateTransactions.map((t, i) => (
+                    <TransactionRow
+                      key={t.id} item={t} colors={colors} first={i === 0}
+                      onDelete={() => removeTransaction(t.id)}
+                      onEdit={() => { setEditTransaction(t); setBudgetModalVisible(true); }}
+                    />
+                  ))}
+                </View>
               </>
             )}
 
@@ -687,15 +689,16 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   monthHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 24, paddingBottom: 8, gap: 12,
+    paddingHorizontal: 20, paddingBottom: 12, gap: 4,
   },
-  monthArrow: { padding: 8 },
-  monthArrowText: { fontSize: 32, fontWeight: "300" },
+  // 화살표 터치 영역 44×44
+  monthArrow: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  monthArrowText: { fontSize: 28, fontWeight: "300" },
   monthLabel: { fontSize: 20, fontWeight: "700", minWidth: 120, textAlign: "center" },
   monthCaret: { fontSize: 14 },
-  // 월 제목 줄의 세로 가운데에 맞춘 오른쪽 끝 버튼 (제목이 가운데 정렬을 유지하도록 absolute)
-  todayBtn: { position: "absolute", left: 20, bottom: 22, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
-  todayBtnText: { fontSize: 12, fontWeight: "600" },
+  // 월 제목 줄 양 끝 버튼 (제목이 가운데 정렬을 유지하도록 absolute). 높이 44로 터치 영역 확보
+  todayBtn: { position: "absolute", left: 12, bottom: 12, height: 44, paddingHorizontal: 8, justifyContent: "center" },
+  todayBtnText: { fontSize: 15, fontWeight: "600" },
   // ── 색상 선택 ─────────────────────────────────────────────
   colorSection: { gap: 6 },
   colorPicker: { flexDirection: "row", justifyContent: "space-between" },
@@ -716,39 +719,41 @@ const styles = StyleSheet.create({
   selectedDateSticky: { borderTopWidth: StyleSheet.hairlineWidth },
   selectedDateBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 24, paddingVertical: 10,
+    paddingHorizontal: 20, paddingVertical: 10,
   },
   // 버튼 두 개와 한 줄에 놓이므로 좁은 화면에서는 날짜 글자가 줄어든다
-  selectedDateText: { flexShrink: 1, fontSize: 15, fontWeight: "600", marginRight: 8 },
-  barActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  detailBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
-  // 날짜 바의 추가 버튼 — 한눈에 보기 버튼과 같은 크기
-  barAddBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  selectedDateText: { flexShrink: 1, fontSize: 17, fontWeight: "700", marginRight: 8 },
+  barActions: { flexDirection: "row", alignItems: "center", gap: 4 },
+  // 한눈에 보기 — 글자 버튼(시안 1). 높이 36 + 좌우 여백으로 누르기 쉽게
+  detailBtn: { minHeight: 36, paddingHorizontal: 8, justifyContent: "center" },
+  // 날짜 바의 추가 버튼 — 연한 파랑 보조 버튼
+  barAddBtn: { borderRadius: 12, paddingHorizontal: 16, minHeight: 36, justifyContent: "center" },
   // 월 제목 줄 오른쪽 끝 — 오늘 버튼(왼쪽)과 같은 높이에 맞춘다
-  addBtn: { position: "absolute", right: 20, bottom: 20, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
-  addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  detailBtnText: { fontSize: 12, fontWeight: "600" },
+  addBtn: { position: "absolute", right: 20, bottom: 16, borderRadius: 12, paddingHorizontal: 16, minHeight: 36, justifyContent: "center" },
+  addBtnText: { fontSize: 14, fontWeight: "700" },
+  detailBtnText: { fontSize: 14, fontWeight: "600" },
   // ── 목록 ──────────────────────────────────────────────────
   body: { flex: 1 },
   bodyContent: { paddingBottom: 32 },
-  listContent: { paddingHorizontal: 24, gap: 8 },
-  sectionTitle: { fontSize: 12, fontWeight: "600", letterSpacing: 0.5, marginTop: 6 },
-  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
+  listContent: { paddingHorizontal: 20, gap: 8 },
+  // 그날 목록 묶음 카드 — 그림자 없이 얇은 테두리, 안쪽 줄은 구분선
+  listCard: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 16 },
+  sectionTitle: { fontSize: 13, fontWeight: "600", marginTop: 8, marginLeft: 4 },
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginLeft: 4 },
   sectionTitleInRow: { marginTop: 0 },
   daySummary: { flexDirection: "row", gap: 10 },
   daySummaryText: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  scheduleRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingLeft: 12, borderLeftWidth: 3, gap: 8 },
+  // 일정 한 줄: 색 막대 · (제목 / 시간·기간·메모) · 색 이름
+  scheduleRow: { flexDirection: "row", alignItems: "center", minHeight: 56, paddingVertical: 12, gap: 12 },
+  scheduleBar: { width: 3, alignSelf: "stretch", borderRadius: 2 },
   scheduleMain: { flex: 1, gap: 3 },
-  scheduleTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  labelPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
-  labelPillText: { fontSize: 11, fontWeight: "600" },
-  scheduleTitle: { flexShrink: 1, fontSize: 15, fontWeight: "500" },
-  scheduleNote: { fontSize: 12 },
-  scheduleTime: { fontSize: 13, fontWeight: "500", fontVariant: ["tabular-nums"] },
+  scheduleTitle: { fontSize: 16, fontWeight: "600" },
+  scheduleNote: { fontSize: 13, fontVariant: ["tabular-nums"] },
+  scheduleLabel: { fontSize: 13, maxWidth: 80 },
   empty: { justifyContent: "center", alignItems: "center", paddingVertical: 32, gap: 6 },
   emptyText: { fontSize: 15 },
   emptyHint: { fontSize: 13 },
-  hintText: { fontSize: 11, textAlign: "center", paddingTop: 8 },
+  hintText: { fontSize: 12, textAlign: "center", paddingTop: 8 },
   // ── 시트 공통 ─────────────────────────────────────────────
   fieldLabel: { fontSize: 12, fontWeight: "500", marginTop: 8 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
