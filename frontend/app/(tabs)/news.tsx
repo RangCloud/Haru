@@ -3,6 +3,9 @@
  * 목록을 좌우로 밀면 이전·다음 카테고리로 넘어간다 (칩 순서대로, 달력과 같은 미끄러지는 전환).
  * 새로고침은 세 가지: 맨 위에서 아래로 당기기, 맨 아래에서 더 끌어올리기, ↻ 버튼.
  * 외부 API는 반드시 백엔드(/api/news)를 경유한다.
+ *
+ * 2026-11 리디자인(시안 1): 제목 오른쪽에 새로고침·필터 아이콘, 고른 칩은 진한 바탕, 기사 시간은 '12분 전'.
+ * 시안의 '[언론사]'와 기사별 분류 꼬리표는 네이버 응답에 언론사 이름이 없고 '전체'는 기사마다 분류를 모르므로 넣지 않았다.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +25,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors, cardShadow } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { fetchNews, NEWS_CATEGORIES, type NewsCategory, type NewsItem } from "@/src/api/news";
 import { Text } from "@/src/components/AppText";
@@ -43,7 +46,7 @@ function SectionError({
   return (
     <View style={[styles.sectionError, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
       <Text style={[styles.sectionErrorText, { color: colors.subtext }]}>{message}</Text>
-      <TouchableOpacity onPress={onRetry}>
+      <TouchableOpacity onPress={onRetry} style={styles.retryBtn} accessibilityRole="button">
         <Text style={[styles.retryLink, { color: colors.tint }]}>다시 시도</Text>
       </TouchableOpacity>
     </View>
@@ -54,26 +57,29 @@ function SectionError({
 
 /**
  * 뉴스 발행일 포맷팅 — Naver API는 RFC 2822 형식("Mon, 15 Jun 2025 14:30:00 +0900")을 반환한다.
- * Date 파싱 후 "6월 15일 14:30" 형식으로 변환한다. 파싱 실패 시 원문 그대로 반환.
+ * 시안 1처럼 지금과의 차이로 보여 준다: 1분 안 '방금', 1시간 안 'N분 전', 하루 안 'N시간 전', 그 밖 'M월 D일'.
+ * 기기 시계가 조금 빨라 미래 시각이 되면 '방금'으로 본다. 파싱 실패 시 원문 그대로 반환.
  */
-function formatPubDate(s: string): string {
-  try {
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return s;
-    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  } catch {
-    return s;
-  }
+function formatPubDate(s: string, now: number = Date.now()): string {
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  const minutes = Math.floor((now - d.getTime()) / 60_000);
+  if (minutes < 1) return "방금";
+  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}시간 전`;
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
 // ── 뉴스 카드 ────────────────────────────────────────────────
 
-function NewsCard({ item, colors, onPress }: { item: NewsItem; colors: typeof Colors.light; onPress: () => void }) {
+function NewsCard({ item, colors, onPress, first }: { item: NewsItem; colors: typeof Colors.light; onPress: () => void; first: boolean }) {
   return (
     <TouchableOpacity
-      style={[styles.newsCard, { borderBottomColor: colors.separator }]}
+      // 첫 기사 위에는 선을 긋지 않는다 — 카드 테두리와 겹치지 않게
+      style={[styles.newsCard, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
       onPress={onPress}
       activeOpacity={0.6}
+      accessibilityRole="link"
     >
       <Text style={[styles.newsTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
       {item.summary ? (
@@ -215,27 +221,29 @@ export default function NewsScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       {/* 제목 + 필터 + 새로고침 (상단 안전 영역 반영) */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <View style={styles.titleGroup}>
-          <Text style={[styles.screenTitle, { color: colors.text }]}>뉴스 📰</Text>
-          {/* 보고 싶은 카테고리 켜기·끄기와 순서 변경 */}
+        <Text style={[styles.screenTitle, { color: colors.text }]} accessibilityRole="header">뉴스</Text>
+        {/* 오른쪽 아이콘 버튼 두 개 — 새로고침, 카테고리 필터(켜기·끄기와 순서). 터치 영역 44×44 */}
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={onRefresh}
+            disabled={loading}
+            style={[styles.iconBtn, { opacity: loading ? 0.5 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel="뉴스 새로고침"
+          >
+            {loading && !showSpinner
+              ? <ActivityIndicator size="small" color={colors.text} />
+              : <IconSymbol name="arrow.clockwise" size={22} color={colors.text} />}
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setEditVisible(true)}
-            style={[styles.filterBtn, { borderColor: colors.tint }]}
+            style={styles.iconBtn}
+            accessibilityRole="button"
             accessibilityLabel="뉴스 카테고리 필터"
           >
-            <Text style={[styles.filterText, { color: colors.tint }]}>필터</Text>
+            <IconSymbol name="slider.horizontal.3" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          onPress={onRefresh}
-          disabled={loading}
-          style={[styles.refreshBtn, { backgroundColor: colors.tintLight, opacity: loading ? 0.5 : 1 }]}
-          accessibilityLabel="뉴스 새로고침"
-        >
-          {loading && !showSpinner
-            ? <ActivityIndicator size="small" color={colors.tint} />
-            : <IconSymbol name="arrow.clockwise" size={18} color={colors.tint} />}
-        </TouchableOpacity>
       </View>
 
       {/* 카테고리 칩 (피드백 19번) */}
@@ -253,10 +261,12 @@ export default function NewsScreen() {
                 key={c.value}
                 onPress={() => setCategory(c.value)}
                 onLayout={(e) => { chipX.current[c.value] = e.nativeEvent.layout.x; }}
-                style={[styles.chip, { borderColor: selected ? colors.tint : colors.cardBorder, backgroundColor: selected ? colors.tint : colors.card }]}
+                // 시안 1: 고른 칩은 본문색(진한 회색) 바탕 + 바탕색 글자, 나머지는 테두리만
+                style={[styles.chip, { borderColor: selected ? colors.text : colors.cardBorder, backgroundColor: selected ? colors.text : colors.card }]}
+                accessibilityRole="button"
                 accessibilityState={{ selected }}
               >
-                <Text style={[styles.chipText, { color: selected ? "#fff" : colors.subtext }]}>{c.label}</Text>
+                <Text style={[styles.chipText, { color: selected ? colors.card : colors.subtext }, selected && styles.chipTextOn]}>{c.label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -285,14 +295,15 @@ export default function NewsScreen() {
         ) : current?.error && current.items.length === 0 ? (
           <SectionError message={current.error} onRetry={() => load(category)} colors={colors} />
         ) : (
-          <View style={[styles.newsList, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
+          <View style={[styles.newsList, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             {!current || current.items.length === 0
               ? <Text style={[styles.newsEmpty, { color: colors.subtext }]}>뉴스를 가져오지 못했습니다.</Text>
-              : current.items.map((item) => (
+              : current.items.map((item, i) => (
                 <NewsCard
                   key={item.link}
                   item={item}
                   colors={colors}
+                  first={i === 0}
                   onPress={() => Linking.openURL(item.link).catch(() => {})}
                 />
               ))
@@ -301,7 +312,7 @@ export default function NewsScreen() {
         )}
         {current?.fetchedAt ? (
           <Text style={[styles.updatedAt, { color: colors.subtext }]}>
-            {formatUpdatedAt(current.fetchedAt)} 업데이트 · 맨 위·맨 아래에서 당기거나 ↻ 버튼으로 새로고침
+            {formatUpdatedAt(current.fetchedAt)} 업데이트 · 맨 위·맨 아래에서 당기거나 새로고침 버튼으로 새로 받아요
           </Text>
         ) : null}
         {bottomRefreshing && (
@@ -329,24 +340,24 @@ function formatUpdatedAt(ms: number): string {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingBottom: 12 },
-  refreshBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 12 },
+  headerActions: { flexDirection: "row", alignItems: "center", marginRight: -10 },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   // flexShrink 0: 기사가 많아도 칩 줄 높이가 줄어들어 글자가 잘리지 않게 한다
   chipScroll: { flexGrow: 0, flexShrink: 0 },
   list: { flex: 1 },
-  titleGroup: { flexDirection: "row", alignItems: "center", gap: 10 },
-  filterBtn: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 4 },
-  filterText: { fontSize: 13, fontWeight: "600" },
-  chips: { paddingHorizontal: 24, gap: 8, paddingBottom: 12 },
-  chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7 },
-  chipText: { fontSize: 13, fontWeight: "600" },
+  chips: { paddingHorizontal: 20, gap: 8, paddingBottom: 12 },
+  // 칩 — 높이 36, 모서리 10(시안 1)
+  chip: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, minHeight: 36, justifyContent: "center" },
+  chipText: { fontSize: 14, fontWeight: "500" },
+  chipTextOn: { fontWeight: "700" },
   centered: { justifyContent: "center", alignItems: "center", gap: 12, paddingVertical: 48 },
   statusText: { fontSize: 14 },
-  container: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },
+  container: { paddingHorizontal: 20, paddingBottom: 32, gap: 8 },
   // 미끄러지는 안쪽 틀 — 예전에 container가 주던 항목 사이 간격을 여기서 준다
   slide: { gap: 8 },
-  screenTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5 },
-  updatedAt: { fontSize: 11, textAlign: "center", marginTop: 4 },
+  screenTitle: { fontSize: 26, fontWeight: "700", letterSpacing: -0.5 },
+  updatedAt: { fontSize: 12, textAlign: "center", marginTop: 4 },
   bottomRefresh: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 8 },
   bottomRefreshText: { marginTop: 0 },
   // ── 뉴스 ──────────────────────────────────────────────────
@@ -356,17 +367,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   newsCard: {
-    padding: 16,
-    gap: 5,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 6,
   },
-  newsEmpty: { fontSize: 13, padding: 16, textAlign: "center" },
-  newsTitle: { fontSize: 14, fontWeight: "600", lineHeight: 20 },
-  newsSummary: { fontSize: 12, lineHeight: 18 },
-  newsPubDate: { fontSize: 11, lineHeight: 16, marginTop: 2 },
+  newsEmpty: { fontSize: 14, padding: 16, textAlign: "center" },
+  newsTitle: { fontSize: 16, fontWeight: "700", lineHeight: 23 },
+  newsSummary: { fontSize: 14, lineHeight: 21 },
+  newsPubDate: { fontSize: 12, lineHeight: 16, marginTop: 2 },
   // ── 섹션 오류 ─────────────────────────────────────────────
   sectionError: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
     flexDirection: "row",
@@ -374,5 +385,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sectionErrorText: { fontSize: 13, flex: 1 },
-  retryLink: { fontSize: 13, fontWeight: "600", marginLeft: 8 },
+  retryBtn: { minHeight: 44, justifyContent: "center", marginLeft: 8 },
+  retryLink: { fontSize: 14, fontWeight: "600" },
 });
