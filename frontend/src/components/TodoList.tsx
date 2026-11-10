@@ -1,13 +1,13 @@
 /**
- * 할 일 + 루틴 목록 (홈·일정 탭 공용)
+ * 할 일 + 루틴 목록 (홈 화면)
  *
  * 순서: ★ 중요 → 루틴 → 일반 할 일.
  * 피드백 13번: 중요한 항목은 목록 맨 위로 올린다.
- * 중요 표시는 체크박스 자체의 색으로 한다(시안 A) — 예전의 작은 별 배지는 11pt라 잘 안 보이고 완료 뒤에도 남았다.
- *   안 한 일: 진한 호박 테두리 + 연한 호박 바탕 → 테두리 색뿐 아니라 '바탕이 채워진 칸'이라는 면으로도 구분
- *   완료한 일: 밝은 호박 채움 + 진한 체크 → 인디고 채움 + 흰 체크인 일반 완료와 밝기·체크 색이 반대라 흑백에서도 구분
- *   (색 값과 대비 근거는 constants/theme.ts의 important* 토큰 주석)
- * 피드백 18번: 루틴은 제목 아래에 반복 요일(예: 월·수·금)을 작게 표시한다.
+ *
+ * 2026-11 리디자인(시안 1): 한 줄 = 체크박스 · 제목 · 오른쪽 꼬리표, 줄 사이는 얇은 구분선.
+ *   중요한 일: 파란 테두리(2) 체크박스 + 오른쪽 '중요' 글자 — 색만으로 구분하지 않도록 글자 꼬리표를 함께 둔다.
+ *   루틴: 오른쪽에 반복 요일(매일·평일·월·목 등)을 적는다(예전에는 제목 아래 작은 줄이었다).
+ *   완료: 파랑 채움 + 체크, 제목은 가운데 줄 + 흐린 글씨.
  *
  * 조작: 탭 = 완료 체크, 길게 누르기 = 수정·중요 표시·삭제 메뉴.
  */
@@ -80,39 +80,37 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
 
   return (
     <View style={styles.list}>
-      {rows.map((row) => {
+      {rows.map((row, index) => {
         const done = row.item.done;
+        // 오른쪽 꼬리표 — 루틴이면 반복 요일(매일·평일·월·목 …)
+        const tag = row.kind === "routine" ? describeWeekdays(row.item.weekdays) : null;
         const onToggle = () =>
           row.kind === "todo" ? toggle(row.item.id, !done) : toggleRoutine(row.item.id, date, !done);
         return (
           <TouchableOpacity
             key={row.key}
-            style={styles.item}
+            // 첫 줄 위에는 선을 긋지 않는다 — 카드 테두리와 겹치지 않게
+            style={[styles.item, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
             onPress={onToggle}
             onLongPress={() => openMenu(row)}
             activeOpacity={0.7}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: done }}
-            accessibilityLabel={`${row.important ? "중요, " : ""}${row.item.title}`}
+            accessibilityLabel={`${row.important ? "중요, " : ""}${row.item.title}${tag ? `, ${tag}` : ""}`}
           >
             <View style={[styles.checkbox, checkboxColors(row.important, done, colors)]}>
               {done && (
-                <Text style={[styles.checkmark, { color: row.important ? colors.importantCheck : "#fff" }]}>✓</Text>
+                <Text style={[styles.checkmark, { color: row.important ? colors.importantCheck : colors.onTint }]}>✓</Text>
               )}
             </View>
-            <View style={styles.textCol}>
-              <Text
-                style={[styles.title, { color: done ? colors.subtext : colors.text }, done && styles.titleDone]}
-                numberOfLines={1}
-              >
-                {row.item.title}
-              </Text>
-              {row.kind === "routine" && (
-                <Text style={[styles.routineCaption, { color: colors.subtext }]}>
-                  ↻ {describeWeekdays(row.item.weekdays)}
-                </Text>
-              )}
-            </View>
+            <Text
+              style={[styles.title, { color: done ? colors.subtext : colors.text }, done && styles.titleDone]}
+              numberOfLines={1}
+            >
+              {row.item.title}
+            </Text>
+            {row.important && <Text style={[styles.tag, styles.tagImportant, { color: colors.tint }]}>중요</Text>}
+            {tag && <Text style={[styles.tag, { color: colors.subtext }]}>{tag}</Text>}
           </TouchableOpacity>
         );
       })}
@@ -141,6 +139,7 @@ export function TodoList({ todos, routines, date, colors, onEdit }: TodoListProp
 /**
  * 체크박스 테두리·바탕 — 중요 여부 × 완료 여부 네 가지 상태.
  * 중요한 칸은 테두리를 2로 조금 굵게 해서 색을 못 봐도 두께 차이가 남게 한다(크기는 22 그대로라 줄이 밀리지 않음).
+ * 체크 표시 색은 완료 채움 위 글자색(onTint·importantCheck) — 다크 모드에서는 밝은 파랑 위라 어두운 체크가 된다.
  */
 function checkboxColors(important: boolean, done: boolean, colors: typeof Colors.light) {
   if (important) {
@@ -148,18 +147,20 @@ function checkboxColors(important: boolean, done: boolean, colors: typeof Colors
       ? { borderWidth: 2, borderColor: colors.importantFill, backgroundColor: colors.importantFill }
       : { borderWidth: 2, borderColor: colors.important, backgroundColor: colors.importantSoft };
   }
+  // 안 한 일 테두리는 보조 글자색 — 예전 separator 색은 흰 바탕에서 1.2:1이라 칸이 잘 안 보였다(UI 요소 3:1 기준)
   return done
     ? { borderColor: colors.tint, backgroundColor: colors.tint }
-    : { borderColor: colors.separator };
+    : { borderColor: colors.subtext };
 }
 
 const styles = StyleSheet.create({
-  list: { gap: 12 },
-  item: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 2 },
+  list: {},
+  // 줄 높이 48 이상 — 터치 영역(iOS 44pt / Android 48dp) 확보
+  item: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48, paddingVertical: 12 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   checkmark: { fontSize: 13, fontWeight: "700" },
-  textCol: { flex: 1, gap: 1 },
-  title: { fontSize: 14 },
+  title: { flex: 1, fontSize: 15 },
   titleDone: { textDecorationLine: "line-through" },
-  routineCaption: { fontSize: 11 },
+  tag: { fontSize: 12 },
+  tagImportant: { fontWeight: "700" },
 });

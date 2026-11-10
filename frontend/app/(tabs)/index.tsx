@@ -1,7 +1,10 @@
 /**
  * 홈 화면
- * 날씨 위젯(우상단) + 오늘 일정 → 투두리스트 → 월별 가계부 요약(제목을 눌러 연·월 선택)
- * 톱니바퀴(⚙) 탭 → 설정 시트 (테마·시작 화면·계정·로그아웃)
+ * 큰 날짜 제목 + 날씨 한 줄 → 오늘 일정 → 할 일 → 월별 가계부 요약(제목을 눌러 연·월 선택)
+ * 오른쪽 위 조절 아이콘 → 설정 시트 (테마·시작 화면·계정·로그아웃)
+ *
+ * 2026-11 리디자인(시안 1): 묶음 제목을 카드 밖으로 꺼내고, 카드 안은 얇은 구분선으로 나눈 목록으로 바꿨다.
+ * 예전의 인사말·날씨 칩(이모지)은 날짜 제목과 '14°, 맑음' 글자 한 줄로 대신한다.
  */
 
 import { router } from "expo-router";
@@ -17,8 +20,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import { PRIVACY_POLICY_URL, SUPPORT_URL } from "@/constants/links";
-import { Colors, cardShadow } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Text } from "@/src/components/AppText";
 import { BottomSheet } from "@/src/components/BottomSheet";
@@ -43,10 +47,11 @@ import { writeWidgetData } from "@/src/utils/widgetData";
 
 // ── 유틸 ─────────────────────────────────────────────────────
 
+/** 홈 제목 — '11월 9일 월요일'. 연도는 늘 올해라 생략한다 */
 function formatToday(): string {
   const now = new Date();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
+  return `${now.getMonth() + 1}월 ${now.getDate()}일 ${days[now.getDay()]}요일`;
 }
 
 function todayString(): string {
@@ -56,15 +61,6 @@ function todayString(): string {
 
 function formatAmount(n: number): string {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "원";
-}
-
-// 하늘 상태·강수 형태를 이모지로 변환
-const SKY_ICON: Record<string, string> = { 맑음: "☀️", 구름조금: "🌤️", 구름많음: "⛅", 흐림: "☁️" };
-const RAIN_ICON: Record<string, string> = { 없음: "", 비: "🌧️", "비/눈": "🌨️", 눈: "❄️", 소나기: "⛈️" };
-
-function getWeatherIcon(sky: string, rainType: string): string {
-  if (rainType !== "없음") return RAIN_ICON[rainType] ?? "🌧️";
-  return SKY_ICON[sky] ?? "🌤️";
 }
 
 // 테마는 라이트·다크 두 가지만 고른다 (피드백: 시스템 모드 삭제)
@@ -132,21 +128,19 @@ function SettingsModal({
     <BottomSheet visible={visible} onClose={onClose} title="설정" colors={colors}>
       {/* 화면 테마 */}
       <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>화면 테마</Text>
-      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-        {THEME_ORDER.map((m, i) => (
+      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.segment }]}>
+        {THEME_ORDER.map((m) => (
           <TouchableOpacity
             key={m}
             style={[
               settingStyles.segment,
-              mode === m && { backgroundColor: colors.tint },
-              i < THEME_ORDER.length - 1 && settingStyles.segmentBorder,
-              i < THEME_ORDER.length - 1 && { borderColor: colors.separator },
+              mode === m && [settingStyles.segmentOn, { backgroundColor: colors.card }],
             ]}
             onPress={() => setMode(m)}
             accessibilityRole="button"
             accessibilityState={{ selected: mode === m }}
           >
-            <Text style={[settingStyles.segmentLabel, { color: mode === m ? "#fff" : colors.subtext }]}>
+            <Text style={[settingStyles.segmentLabel, mode === m ? [settingStyles.segmentLabelOn, { color: colors.text }] : { color: colors.subtext }]}>
               {THEME_LABEL[m]}
             </Text>
           </TouchableOpacity>
@@ -155,21 +149,19 @@ function SettingsModal({
 
       {/* 시작 화면 (피드백 17번) — 앱을 새로 켤 때 먼저 보여줄 탭 */}
       <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>시작 화면</Text>
-      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-        {START_TAB_OPTIONS.map((opt, i) => (
+      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.segment }]}>
+        {START_TAB_OPTIONS.map((opt) => (
           <TouchableOpacity
             key={opt.value}
             style={[
               settingStyles.segment,
               settingStyles.segmentCompact,
-              startTab === opt.value && { backgroundColor: colors.tint },
-              i < START_TAB_OPTIONS.length - 1 && settingStyles.segmentBorder,
-              i < START_TAB_OPTIONS.length - 1 && { borderColor: colors.separator },
+              startTab === opt.value && [settingStyles.segmentOn, { backgroundColor: colors.card }],
             ]}
             onPress={() => setStartTab(opt.value)}
             accessibilityState={{ selected: startTab === opt.value }}
           >
-            <Text style={[settingStyles.segmentLabel, { color: startTab === opt.value ? "#fff" : colors.subtext }]}>
+            <Text style={[settingStyles.segmentLabel, startTab === opt.value ? [settingStyles.segmentLabelOn, { color: colors.text }] : { color: colors.subtext }]}>
               {opt.label}
             </Text>
           </TouchableOpacity>
@@ -179,23 +171,21 @@ function SettingsModal({
 
       {/* 글자 크기 — 고르는 즉시 모든 화면에 적용된다. 아래 미리보기로 바로 확인할 수 있다 */}
       <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>글자 크기</Text>
-      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-        {FONT_SIZE_OPTIONS.map((opt, i) => (
+      <View style={[settingStyles.segmentedControl, { backgroundColor: colors.segment }]}>
+        {FONT_SIZE_OPTIONS.map((opt) => (
           <TouchableOpacity
             key={opt.value}
             style={[
               settingStyles.segment,
               settingStyles.segmentCompact,
-              fontSize === opt.value && { backgroundColor: colors.tint },
-              i < FONT_SIZE_OPTIONS.length - 1 && settingStyles.segmentBorder,
-              i < FONT_SIZE_OPTIONS.length - 1 && { borderColor: colors.separator },
+              fontSize === opt.value && [settingStyles.segmentOn, { backgroundColor: colors.card }],
             ]}
             onPress={() => setFontSize(opt.value)}
             accessibilityState={{ selected: fontSize === opt.value }}
           >
             {/* 네 칸으로 나뉘어 폭이 좁다 — '아주 크게'가 잘리지 않도록 칸에 맞춰 줄인다 */}
             <Text
-              style={[settingStyles.segmentLabel, { color: fontSize === opt.value ? "#fff" : colors.subtext }]}
+              style={[settingStyles.segmentLabel, fontSize === opt.value ? [settingStyles.segmentLabelOn, { color: colors.text }] : { color: colors.subtext }]}
               numberOfLines={1}
               adjustsFontSizeToFit
             >
@@ -248,7 +238,6 @@ function SettingsModal({
       <Text style={[settingStyles.sectionLabel, { color: colors.subtext }]}>계정</Text>
       <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <View style={settingStyles.listRow}>
-          <Text style={settingStyles.listIcon}>👤</Text>
           <View style={settingStyles.listContent}>
             <Text style={[settingStyles.listLabel, { color: colors.text }]}>{user?.name ?? "게스트"}</Text>
             <Text style={[settingStyles.listSub, { color: colors.subtext }]}>
@@ -324,12 +313,14 @@ function SettingsModal({
   );
 }
 
-// ── 날씨 미니 위젯 ────────────────────────────────────────────
+// ── 날씨 한 줄 ────────────────────────────────────────────────
+// 시안 1: 날짜 제목 아래 '14°, 맑음'을 보조 글자로 적는다(예전 이모지 칩 대신).
+// 위치 권한을 거부해 서울 날씨를 보여 줄 때만 앞에 '서울'을 붙인다 — 격자 방식이라 그 밖의 지역 이름은 알 수 없다.
 
-function WeatherChip({ colors }: { colors: typeof Colors.light }) {
-  const { current, isLoading, error, loadWeather } = useWeatherStore();
+function WeatherLine({ colors }: { colors: typeof Colors.light }) {
+  const { current, isLoading, error, usingFallback, loadWeather } = useWeatherStore();
 
-  // 한 번 받은 날씨 데이터는 로컬에도 보관 — Zustand 상태가 어떤 이유로든 초기화돼도 칩이 사라지지 않도록
+  // 한 번 받은 날씨 데이터는 로컬에도 보관 — Zustand 상태가 어떤 이유로든 초기화돼도 줄이 사라지지 않도록
   const [pinned, setPinned] = useState<typeof current>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,43 +333,34 @@ function WeatherChip({ colors }: { colors: typeof Colors.light }) {
   // 표시에 쓸 데이터: 스토어 최신값 우선, 없으면 로컬에 고정된 값
   const display = current ?? pinned;
 
-  // 로딩 중이고 아직 표시할 데이터가 없을 때만 로딩 인디케이터
+  // 로딩 중이고 아직 표시할 데이터가 없을 때
   if (isLoading && !display) {
-    return (
-      <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
-        <Text style={weatherStyles.chipIcon}>🌤</Text>
-        <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>…</Text>
-      </View>
-    );
+    return <Text style={[styles.weatherLine, { color: colors.subtext }]}>날씨 불러오는 중…</Text>;
   }
 
-  // 에러 발생 시: 이전에 받은 데이터가 있으면 그대로 표시, 없으면 재시도 버튼
+  // 에러 발생 시: 이전에 받은 데이터가 있으면 그대로 표시, 없으면 다시 시도할 수 있게 한다
   if (error && !display) {
     return (
       <TouchableOpacity
         onPress={() => loadWeather(true)}
-        style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}
-        activeOpacity={0.7}
+        hitSlop={{ top: 12, bottom: 12, left: 0, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="날씨를 불러오지 못했어요. 눌러서 다시 시도"
       >
-        <Text style={weatherStyles.chipIcon}>⚠️</Text>
-        <Text style={[weatherStyles.chipTemp, { color: colors.subtext }]}>재시도</Text>
+        <Text style={[styles.weatherLine, { color: colors.subtext }]}>
+          날씨를 불러오지 못했어요 · <Text style={{ color: colors.tint }}>다시 시도</Text>
+        </Text>
       </TouchableOpacity>
     );
   }
 
   if (!display) return null;
 
-  const icon = getWeatherIcon(display.sky, display.rain_type);
   const condition = display.rain_type !== "없음" ? display.rain_type : display.sky;
-
   return (
-    <View style={[weatherStyles.chipBox, { backgroundColor: colors.tintLight }]}>
-      <Text style={weatherStyles.chipIcon}>{icon}</Text>
-      <View style={weatherStyles.chipInfo}>
-        <Text style={[weatherStyles.chipTemp, { color: colors.tint }]}>{display.temp}°</Text>
-        <Text style={[weatherStyles.chipCondition, { color: colors.subtext }]}>{condition}</Text>
-      </View>
-    </View>
+    <Text style={[styles.weatherLine, { color: colors.subtext }]}>
+      {usingFallback ? "서울 " : ""}{display.temp}°, {condition}
+    </Text>
   );
 }
 
@@ -422,12 +404,9 @@ function BudgetSummaryCard({
   const openDetail = () => router.push("/(tabs)/budget");
 
   return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}
-      onPress={openDetail}
-      activeOpacity={0.75}
-    >
-      <View style={styles.cardHeader}>
+    <>
+      {/* 묶음 제목은 카드 밖 — 제목을 누르면 기간 선택, 오른쪽 '자세히'는 가계부 탭 */}
+      <View style={styles.sectionHeader}>
         <View style={styles.monthNav}>
           {/* 일정 탭 상단처럼 제목을 누르면 기간 선택 창 */}
           <TouchableOpacity
@@ -438,13 +417,13 @@ function BudgetSummaryCard({
               : `${year}년 ${month}월 가계부, 눌러서 다른 기간 선택`}
           >
             <View style={styles.monthTitleRow}>
-              <Text style={[styles.cardLabel, { color: colors.text }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 {custom ? formatRange(range) : `${year === now.getFullYear() ? "" : `${year}년 `}${month}월 가계부`}{" "}
                 <Text style={[styles.monthCaret, { color: colors.subtext }]}>▾</Text>
               </Text>
               {isCurrent && (
                 <View style={[styles.thisMonthPill, { backgroundColor: colors.tintLight }]}>
-                  <Text style={[styles.thisMonthText, { color: colors.tint }]}>이번 달</Text>
+                  <Text style={[styles.thisMonthText, { color: colors.tintStrong }]}>이번 달</Text>
                 </View>
               )}
             </View>
@@ -453,19 +432,25 @@ function BudgetSummaryCard({
         </View>
         {/* 직접 고른 기간이면 '자세히' 대신 '이번 달로' — 카드 나머지 부분을 누르면 여전히 가계부 탭으로 간다 */}
         {custom ? (
-          <TouchableOpacity onPress={onResetPeriod} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button">
-            <Text style={[styles.cardLink, { color: colors.tint }]}>이번 달로</Text>
+          <TouchableOpacity onPress={onResetPeriod} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button">
+            <Text style={[styles.sectionLink, { color: colors.tint }]}>이번 달로</Text>
           </TouchableOpacity>
         ) : (
-          <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
+          <TouchableOpacity onPress={openDetail} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="link">
+            <Text style={[styles.sectionLink, { color: colors.tint }]}>자세히</Text>
+          </TouchableOpacity>
         )}
       </View>
+      <TouchableOpacity
+        style={[styles.card, styles.cardPadded, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+        onPress={openDetail}
+        activeOpacity={0.75}
+      >
       <View style={styles.budgetRow}>
         <View style={styles.budgetItem}>
           <Text style={[styles.budgetCaption, { color: colors.subtext }]}>수입 총액</Text>
           <Text style={[styles.budgetValue, { color: colors.income }]}>{formatAmount(income)}</Text>
         </View>
-        <View style={[styles.budgetDivider, { backgroundColor: colors.separator }]} />
         <View style={styles.budgetItem}>
           <Text style={[styles.budgetCaption, { color: colors.subtext }]}>지출 총액</Text>
           <Text style={[styles.budgetValue, { color: colors.expense }]}>{formatAmount(expense)}</Text>
@@ -506,8 +491,9 @@ function BudgetSummaryCard({
         )}
       </View>
 
+      </TouchableOpacity>
       <BudgetPeriodSheet visible={pickerVisible} onClose={() => setPickerVisible(false)} colors={colors} />
-    </TouchableOpacity>
+    </>
   );
 }
 
@@ -537,46 +523,54 @@ function TodayScheduleCard({
   const preview = schedules.slice(0, 3);
   const now = useNowHHMM();
 
+  const openSchedule = () => router.push("/(tabs)/schedule");
+
   return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}
-      onPress={() => router.push("/(tabs)/schedule")}
-      activeOpacity={0.75}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 일정</Text>
-        <Text style={[styles.cardLink, { color: colors.tint }]}>자세히 →</Text>
+    <>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>오늘 일정</Text>
+        <TouchableOpacity onPress={openSchedule} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="link">
+          <Text style={[styles.sectionLink, { color: colors.tint }]}>전체 보기</Text>
+        </TouchableOpacity>
       </View>
-      {preview.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.subtext }]}>오늘 일정이 없습니다.</Text>
-      ) : (
-        <>
-          {preview.map((s) => {
-            // 끝난 일정은 완료한 할 일과 똑같이 가운데 줄 + 흐린 글씨
-            const past = isPastOn(s, today, now);
-            return (
-            <View key={s.id} style={styles.scheduleItem}>
-              <View style={[styles.scheduleDot, { backgroundColor: s.color || colors.tint }, past && styles.pastDot]} />
-              <Text
-                style={[styles.scheduleTitle, { color: past ? colors.subtext : colors.text }, past && styles.pastTitle]}
-                numberOfLines={1}
-              >
-                {s.title}
-              </Text>
-              <Text style={[styles.scheduleTime, { color: colors.subtext }]}>
-                {timeLabelOn(s, today)}
-              </Text>
-            </View>
-            );
-          })}
-          {schedules.length > 3 && (
-            <Text style={[styles.moreText, { color: colors.tint }]}>
-              +{schedules.length - 3}개 더 보기
-            </Text>
-          )}
-        </>
-      )}
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+        onPress={openSchedule}
+        activeOpacity={0.75}
+      >
+        {preview.length === 0 ? (
+          <Text style={[styles.emptyText, { color: colors.subtext }]}>오늘 일정이 없습니다.</Text>
+        ) : (
+          <>
+            {preview.map((s, i) => {
+              // 끝난 일정은 완료한 할 일과 똑같이 가운데 줄 + 흐린 글씨
+              const past = isPastOn(s, today, now);
+              return (
+                <View
+                  key={s.id}
+                  style={[styles.scheduleItem, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
+                >
+                  {/* 왼쪽 색 막대 — 일정 색. 끝난 일정은 막대도 흐리게 */}
+                  <View style={[styles.scheduleBar, { backgroundColor: s.color || colors.tint }, past && styles.pastBar]} />
+                  <Text style={[styles.scheduleTime, { color: colors.subtext }]}>{timeLabelOn(s, today)}</Text>
+                  <Text
+                    style={[styles.scheduleTitle, { color: past ? colors.subtext : colors.text }, past && styles.pastTitle]}
+                    numberOfLines={1}
+                  >
+                    {s.title}
+                  </Text>
+                </View>
+              );
+            })}
+            {schedules.length > 3 && (
+              <View style={[styles.scheduleItem, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}>
+                <Text style={[styles.moreText, { color: colors.tint }]}>+{schedules.length - 3}개 더 보기</Text>
+              </View>
+            )}
+          </>
+        )}
+      </TouchableOpacity>
+    </>
   );
 }
 
@@ -591,37 +585,40 @@ function TodoCard({ colors }: { colors: typeof Colors.light }) {
   const doneCount = all.filter((t) => t.done).length;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, cardShadow]}>
-      <View style={styles.cardHeader}>
+    <>
+      <View style={styles.sectionHeader}>
         <View style={styles.todoHeaderLeft}>
-          <Text style={[styles.cardLabel, { color: colors.subtext }]}>오늘 할 일</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>할 일</Text>
           {all.length > 0 && (
             <Text style={[styles.todoBadge, { color: colors.subtext }]}>
               {doneCount}/{all.length}
             </Text>
           )}
         </View>
-        {/* 할 일·루틴·날짜 지정·중요 표시는 모두 추가 창에서 */}
+        {/* 할 일·루틴·날짜 지정·중요 표시는 모두 추가 창에서. 연한 파랑 보조 버튼(시안 1) */}
         <TouchableOpacity
           onPress={() => setSheet({ open: true })}
-          style={[styles.todoAddBtn, { backgroundColor: colors.tint }]}
+          style={[styles.addBtn, { backgroundColor: colors.tintLight }]}
+          accessibilityRole="button"
           accessibilityLabel="할 일 추가"
         >
-          <Text style={styles.todoAddText}>+ 추가</Text>
+          <Text style={[styles.addBtnText, { color: colors.tintStrong }]}>추가</Text>
         </TouchableOpacity>
       </View>
 
-      {isLoaded && all.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.subtext }]}>+ 추가로 할 일이나 루틴을 넣어 보세요.</Text>
-      ) : (
-        <TodoList
-          todos={todos} routines={routines} date={todayString()} colors={colors}
-          onEdit={(target) => setSheet({ open: true, target })}
-        />
-      )}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        {isLoaded && all.length === 0 ? (
+          <Text style={[styles.emptyText, { color: colors.subtext }]}>추가를 눌러 할 일이나 루틴을 넣어 보세요.</Text>
+        ) : (
+          <TodoList
+            todos={todos} routines={routines} date={todayString()} colors={colors}
+            onEdit={(target) => setSheet({ open: true, target })}
+          />
+        )}
+      </View>
 
       {all.length > 0 && (
-        <Text style={[styles.todoHint, { color: colors.subtext }]}>길게 눌러 수정·★ 중요 표시·삭제</Text>
+        <Text style={[styles.todoHint, { color: colors.subtext }]}>길게 눌러 수정·중요 표시·삭제</Text>
       )}
 
       <TodoAddSheet
@@ -630,7 +627,7 @@ function TodoCard({ colors }: { colors: typeof Colors.light }) {
         editTarget={sheet.target}
         colors={colors}
       />
-    </View>
+    </>
   );
 }
 
@@ -641,7 +638,6 @@ export default function HomeScreen() {
   const colors = Colors[scheme];
 
   const insets = useSafeAreaInsets();
-  const { user } = useAuthStore();
   // 홈은 항상 "이번 달·오늘" 기준 — 일정 탭에서 다른 달로 넘겨도 영향받지 않는 전용 값을 쓴다
   const {
     homeYear, homeMonth, homeRange, homeCustom, homeIncome, homeExpense, todayTransactions,
@@ -719,31 +715,26 @@ export default function HomeScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: colors.text }]}>
-            안녕하세요, {user?.name ?? ""}님 👋
-          </Text>
-          <Text style={[styles.date, { color: colors.subtext }]}>{formatToday()}</Text>
+          {/* 시안 1: 큰 날짜 제목 + 날씨 한 줄 (예전 인사말·날씨 칩 대신) */}
+          <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">{formatToday()}</Text>
+          <WeatherLine colors={colors} />
         </View>
-        {/* 오른쪽: 날씨 위젯 + 설정 버튼 */}
-        <View style={styles.headerActions}>
-          <WeatherChip colors={colors} />
-          <TouchableOpacity
-            onPress={() => setSettingsVisible(true)}
-            style={styles.iconBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.settingsIcon}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
+        {/* 설정 — 이모지(⚙️) 대신 선 아이콘. 터치 영역 44×44 */}
+        <TouchableOpacity
+          onPress={() => setSettingsVisible(true)}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="설정"
+        >
+          <IconSymbol name="slider.horizontal.3" size={22} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
       {/* 오늘 일정을 최상단에 배치 — 당일 할 일을 가장 먼저 확인 */}
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>오늘</Text>
       <TodayScheduleCard schedules={todaySchedules} today={today} colors={colors} />
       <TodoCard colors={colors} />
 
       {/* 가계부 요약 — 일정·할 일보다 부차적인 정보 */}
-      <Text style={[styles.sectionLabel, { color: colors.subtext }]}>가계부</Text>
       <BudgetSummaryCard
         year={homeYear} month={homeMonth} range={homeRange} custom={homeCustom} monthStartDay={monthStartDay}
         income={homeIncome} expense={homeExpense} colors={colors}
@@ -765,83 +756,80 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 24, paddingTop: 64, gap: 8 },
+  // 좌우 여백 20, 묶음 사이 간격은 sectionHeader의 marginTop으로 준다 (4/8 단위)
+  content: { paddingHorizontal: 20, paddingBottom: 32 },
   // ── 헤더 ──────────────────────────────────────────────────
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 20,
-  },
-  headerLeft: { gap: 4, flex: 1, marginRight: 12 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 2 },
-  greeting: { fontSize: 17, fontWeight: "700", letterSpacing: -0.3 },
-  date: { fontSize: 13 },
-  iconBtn: { padding: 4 },
-  settingsIcon: { fontSize: 20 },
-  // ── 섹션 레이블 ───────────────────────────────────────────
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  // ── 카드 공통 ─────────────────────────────────────────────
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-    gap: 14,
     marginBottom: 4,
   },
-  cardHeader: {
+  headerLeft: { gap: 6, flex: 1, marginRight: 12 },
+  title: { fontSize: 26, fontWeight: "700", letterSpacing: -0.5 },
+  weatherLine: { fontSize: 14 },
+  // 아이콘 버튼 — 터치 영역 44×44 (iOS 최소 기준). 오른쪽 여백만큼 바깥으로 빼서 아이콘이 글자 끝선에 맞게
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -10, marginTop: -6 },
+  // ── 묶음 제목 (카드 밖) ───────────────────────────────────
+  sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 28,
+    marginBottom: 10,
+    minHeight: 36,
   },
-  cardLabel: { fontSize: 13, fontWeight: "600", letterSpacing: 0.2 },
-  cardLink: { fontSize: 13 },
-  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
-  monthCaret: { fontSize: 11 },
+  sectionTitle: { fontSize: 17, fontWeight: "700", letterSpacing: -0.2 },
+  sectionLink: { fontSize: 14, fontWeight: "500" },
+  // ── 카드(묶음 목록) — 그림자 없이 얇은 테두리, 안쪽은 구분선으로 나눈 줄 ──
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+  },
+  // 줄 목록이 아닌 카드(가계부 요약)는 위아래 여백을 준다
+  cardPadded: { paddingVertical: 16, gap: 14 },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
+  monthCaret: { fontSize: 12 },
   monthTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  periodSub: { fontSize: 11.5, fontWeight: "500", marginTop: 2 },
+  periodSub: { fontSize: 12, fontWeight: "500", marginTop: 2 },
   thisMonthPill: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
-  thisMonthText: { fontSize: 10, fontWeight: "700" },
-  emptyText: { fontSize: 14 },
+  thisMonthText: { fontSize: 11, fontWeight: "700" },
+  emptyText: { fontSize: 14, paddingVertical: 16 },
   // ── 가계부 ────────────────────────────────────────────────
-  budgetRow: { flexDirection: "row", alignItems: "center" },
-  budgetItem: { flex: 1, alignItems: "center", gap: 5 },
-  budgetDivider: { width: 1, height: 32 },
-  budgetCaption: { fontSize: 11 },
-  budgetValue: { fontSize: 14, fontWeight: "700" },
+  // 시안 1: 두 칸 모두 왼쪽 정렬, 큰 금액. 색은 수입 초록 / 지출 빨강(사용자 요청)
+  budgetRow: { flexDirection: "row" },
+  budgetItem: { flex: 1, gap: 4 },
+  budgetCaption: { fontSize: 13 },
+  budgetValue: { fontSize: 20, fontWeight: "700", letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
   // 오늘 내역 — 월 합계 아래에 가는 선으로 나눠 붙인다
-  todayTx: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, gap: 8 },
+  todayTx: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, gap: 10 },
   todayTxHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  todayTxTitle: { fontSize: 12, fontWeight: "600" },
+  todayTxTitle: { fontSize: 13, fontWeight: "600" },
   todayTxSums: { flexDirection: "row", gap: 8 },
-  todayTxSum: { fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  todayTxEmpty: { fontSize: 13 },
+  todayTxSum: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  todayTxEmpty: { fontSize: 14 },
   todayTxRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  todayTxCategory: { fontSize: 12, width: 44 },
-  todayTxNote: { flex: 1, fontSize: 14 },
-  todayTxAmount: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
-  todayTxMore: { fontSize: 12 },
+  todayTxCategory: { fontSize: 13, width: 44 },
+  todayTxNote: { flex: 1, fontSize: 15 },
+  todayTxAmount: { fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  todayTxMore: { fontSize: 13 },
   // ── 일정 ──────────────────────────────────────────────────
-  scheduleItem: { flexDirection: "row", alignItems: "center", gap: 10 },
-  scheduleDot: { width: 7, height: 7, borderRadius: 4 },
-  scheduleTitle: { flex: 1, fontSize: 14 },
-  scheduleTime: { fontSize: 12 },
+  // 한 줄: 색 막대 · 시간 · 제목 (줄 높이 48 이상)
+  scheduleItem: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48, paddingVertical: 12 },
+  scheduleBar: { width: 3, height: 18, borderRadius: 2 },
+  scheduleTime: { fontSize: 14, fontVariant: ["tabular-nums"], minWidth: 44 },
+  scheduleTitle: { flex: 1, fontSize: 15 },
   pastTitle: { textDecorationLine: "line-through" },
-  pastDot: { opacity: 0.4 },
-  moreText: { fontSize: 13, fontWeight: "500" },
-  // ── 투두 ──────────────────────────────────────────────────
-  todoBadge: { fontSize: 12 },
-  todoHint: { fontSize: 11, marginTop: -4 },
-  todoHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  todoAddBtn: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
-  todoAddText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  pastBar: { opacity: 0.4 },
+  moreText: { fontSize: 14, fontWeight: "500" },
+  // ── 할 일 ─────────────────────────────────────────────────
+  todoBadge: { fontSize: 15 },
+  todoHint: { fontSize: 12, marginTop: 8, marginLeft: 4 },
+  todoHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // 연한 파랑 보조 버튼
+  addBtn: { borderRadius: 12, paddingHorizontal: 16, minHeight: 36, justifyContent: "center" },
+  addBtnText: { fontSize: 14, fontWeight: "700" },
 });
 
 // ── 설정 모달 스타일 (바텀 시트) ─────────────────────────────
@@ -857,25 +845,32 @@ const settingStyles = StyleSheet.create({
     marginLeft: 4,
   },
   // 테마 세그먼트
+  // 시안 1 구간 선택: 회색 바탕 안에서 고른 칸만 흰 바탕(card)으로 떠 보이게 — 색뿐 아니라 '떠 있는 칸'과 굵은 글자로도 구분
   segmentedControl: {
     flexDirection: "row",
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: "hidden",
+    borderRadius: 12,
+    padding: 3,
   },
   segment: {
     flex: 1,
-    paddingVertical: 12,
+    minHeight: 40,
+    paddingVertical: 10,
+    borderRadius: 9,
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
   },
-  segmentBorder: {
-    borderRightWidth: 1,
+  segmentOn: {
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
+  segmentLabelOn: { fontWeight: "700" },
   // 시작 화면 선택은 아이콘 없이 글자만 — 높이를 줄인다
-  segmentCompact: { paddingVertical: 10 },
+  segmentCompact: { paddingVertical: 8 },
   hint: { fontSize: 11, marginLeft: 4, marginTop: -2 },
-  segmentLabel: { fontSize: 12, fontWeight: "500" },
+  segmentLabel: { fontSize: 13, fontWeight: "500" },
   // 글자 크기 미리보기
   preview: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 4 },
   previewTitle: { fontSize: 15, fontWeight: "600" },
@@ -893,7 +888,6 @@ const settingStyles = StyleSheet.create({
     paddingVertical: 14,
     gap: 12,
   },
-  listIcon: { fontSize: 20 },
   listContent: { flex: 1, gap: 2 },
   listLabel: { fontSize: 15, fontWeight: "500" },
   listSub: { fontSize: 13 },
@@ -907,21 +901,4 @@ const settingStyles = StyleSheet.create({
     alignItems: "center",
   },
   logoutText: { fontSize: 15, fontWeight: "600" },
-});
-
-// ── 날씨 칩 스타일 ─────────────────────────────────────────────
-
-const weatherStyles = StyleSheet.create({
-  chipBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  chipIcon: { fontSize: 20 },
-  chipInfo: { gap: 0 },
-  chipTemp: { fontSize: 15, fontWeight: "700", lineHeight: 18 },
-  chipCondition: { fontSize: 10, lineHeight: 13 },
 });

@@ -39,7 +39,7 @@ export default function TabLayout() {
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: "500",
+          fontWeight: "600",
         },
       }}
     >
@@ -48,7 +48,7 @@ export default function TabLayout() {
         options={{
           title: "홈",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="house.fill" color={color} />
+            <IconSymbol size={24} name="house" color={color} />
           ),
         }}
       />
@@ -66,7 +66,7 @@ export default function TabLayout() {
         options={{
           title: "가계부",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="wonsign.circle.fill" color={color} />
+            <IconSymbol size={24} name="creditcard" color={color} />
           ),
         }}
       />
@@ -75,7 +75,7 @@ export default function TabLayout() {
         options={{
           title: "운세",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="sparkles" color={color} />
+            <IconSymbol size={24} name="moon" color={color} />
           ),
         }}
       />
@@ -84,7 +84,7 @@ export default function TabLayout() {
         options={{
           title: "뉴스",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={24} name="newspaper.fill" color={color} />
+            <IconSymbol size={24} name="newspaper" color={color} />
           ),
         }}
       />
