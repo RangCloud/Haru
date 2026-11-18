@@ -3,7 +3,17 @@
 > 가계부 · 일정 · 할 일 · 날씨 · 뉴스 · 오늘의 운세를 한 곳에 — 오늘 하루를 한눈에 정리하는 데일리 라이프 앱
 
 iOS · Android 단일 코드베이스(Expo) + FastAPI 백엔드로 만든 개인 프로젝트입니다.
-현재 **v1.0 출시 준비 중**이며 TestFlight 내부 테스트를 진행하고 있습니다.
+현재 **v1.0 출시 준비 중**이며 TestFlight 외부 테스트와 Google Play 비공개 테스트로 베타 테스트를 진행하고 있습니다.
+
+## QA
+
+| 항목 | 내용 |
+| --- | --- |
+| 테스트 케이스 | **71개**, 9개 영역 (인증·로그인 7 · 홈 8 · 날씨 7 · 가계부 14 · 일정 12 · 더보기 7 · 탭 이동 4 · 다크 모드 6 · 오류·엣지 케이스 6) |
+| 우선순위 · 형식 | TC마다 우선순위(P1~P3), 테스트 절차, 기대 결과, 결과 칸(통과 · 실패 · 스킵 선택). 요약 시트에서 영역별 통과율 집계 |
+| 베타 테스트 | TestFlight · Google Play 비공개 테스트로 빌드 전달, 테스터 의견을 정리해 수정 |
+
+📋 **QA 체크리스트(엑셀)**: [`docs/qa/하루_QA_테스트케이스_v1.0.xlsx`](docs/qa/하루_QA_테스트케이스_v1.0.xlsx) — 2026년 8월 초기 화면 구성(소셜 로그인, 더보기 탭) 기준으로 작성한 v1.0
 
 ---
 
@@ -161,6 +171,7 @@ cd backend && uv run --with ruff ruff check app
 
 ## 문서
 
+- [QA 테스트 케이스 체크리스트(엑셀)](docs/qa/하루_QA_테스트케이스_v1.0.xlsx)
 - [개인정보처리방침](https://claude.ai/artifact/Wtow7QzFfP4kb38yesbSKC)
 - [고객 지원](https://claude.ai/artifact/BspFhWyr3TRYUw5K3njyEF)
 - 문의: taerang0088@gmail.com
