@@ -41,7 +41,6 @@ import { useBudgetStore } from "@/src/store/budgetStore";
 import { useHolidayStore } from "@/src/store/holidayStore";
 import { useScheduleStore } from "@/src/store/scheduleStore";
 import { formatMonthDay, parseDate, shiftMonth, toDateStr, todayString } from "@/src/utils/date";
-import { scheduleEventNotification } from "@/src/utils/notifications";
 import { SCHEDULE_COLORS } from "@/src/utils/scheduleColors";
 import { lastDayOf, periodLabel, timeLabelOn } from "@/src/utils/scheduleText";
 
@@ -636,9 +635,8 @@ export default function ScheduleScreen() {
             await updateSchedule(editSchedule.id, s);
             setEditSchedule(undefined);
           } else {
+            // 시작 시간이 있는 일정의 10분 전 알림은 store가 저장과 함께 예약·취소한다(scheduleStore)
             await addSchedule(s);
-            // 시작 시간이 있는 일정은 첫날 10분 전 알림을 예약한다
-            if (s.time) await scheduleEventNotification(s.title, s.date, s.time);
           }
         }}
         colors={colors}

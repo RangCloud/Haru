@@ -149,5 +149,36 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     });
   }
 
+  // ── 마이그레이션 v4 → v5: 일정 알림 ID 저장 ──
+  // notification_id: expo-notifications가 예약할 때 돌려준 알림 ID. 알림이 없으면 빈 문자열.
+  // 이전 버전은 이 ID를 저장하지 않아서, 일정을 지우거나 시간을 바꿔도 예약된 알림을 찾아 취소할 수 없었다(QA TC-042).
+  // 컬럼을 "추가"만 하므로 기존 일정은 그대로 유지된다.
+  if (schemaVersion < 5) {
+    const db = _db;
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        ALTER TABLE schedules ADD COLUMN notification_id TEXT NOT NULL DEFAULT '';
+        PRAGMA user_version = 5;
+      `);
+    });
+    // 업데이트 전에 예약된 알림은 ID 기록이 없어 개별로 취소할 수 없다.
+    // DB는 알림 API를 모르므로 "한 번 다시 맞춰야 한다"는 표시만 남기고, 실제 정리는 scheduleStore가 한다.
+    _notificationResyncPending = true;
+  }
+
   return _db;
+}
+
+// v5 마이그레이션을 이번 실행에서 했는지 — 예전 알림을 한 번 정리해야 하는지 알려 준다
+let _notificationResyncPending = false;
+
+/**
+ * 예전 알림 정리가 필요한지 확인하고 표시를 지운다(한 번만 true).
+ * DB를 연 뒤에 불러야 정확하므로 getDatabase()를 먼저 기다린다.
+ */
+export async function takeNotificationResyncFlag(): Promise<boolean> {
+  await getDatabase();
+  const pending = _notificationResyncPending;
+  _notificationResyncPending = false;
+  return pending;
 }

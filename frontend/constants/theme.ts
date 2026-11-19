@@ -31,7 +31,7 @@ export const Colors = {
     tabIconDefault: "#5F646A",
     tabIconSelected: PRIMARY_LIGHT,
     income: "#15803D",           // 수입 초록 — 5.02:1 (예전 #16A34A는 3.3:1이라 기준 미달이었다)
-    expense: "#DC2626",          // 지출 빨강 — 4.83:1
+    expense: "#C81E1E",          // 지출 빨강 — 미색 바탕 5.26:1 · 흰 카드 5.74:1 (예전 #DC2626은 바탕 위 4.43:1로 기준 미달, QA TC-096). 일요일색과 명도가 비슷하지만 금액은 늘 −/+ 기호와 함께 나와 구분된다
     sunday: "#B4361F",           // 일요일·공휴일 — 6.02:1 (지출 빨강과 겹치지 않게 갈색 기운의 빨강)
     saturday: "#2C5AA0",         // 토요일 — 6.82:1
     separator: "#E7E7E5",

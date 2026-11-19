@@ -68,3 +68,15 @@ export function timeLabelOn(s: Timed, date: string): string {
 export function periodLabel(s: Timed): string {
   return lastDayOf(s) !== s.date ? `${formatShort(s.date)}~${formatShort(lastDayOf(s))}` : "";
 }
+
+// ── 알림 대상 ─────────────────────────────────────────────────
+
+/**
+ * 이 일정에 10분 전 알림을 걸어야 하는지.
+ * - 시작 시각이 있는 일정만 — 종일 일정은 "10분 전"이 없다.
+ * - 기기 캘린더에서 가져온 일정(source_id 있음)은 제외 — 기기 캘린더 앱이 이미 알림을 보내므로 두 번 울리지 않게 한다.
+ *   가져온 일정을 하루에서 고쳐도 마찬가지로 알림을 걸지 않는다(가져올 때와 같은 기준).
+ */
+export function needsEventNotification(s: Pick<ScheduleItem, "time" | "source_id">): boolean {
+  return s.time !== "" && !s.source_id;
+}

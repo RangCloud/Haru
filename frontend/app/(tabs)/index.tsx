@@ -645,7 +645,7 @@ export default function HomeScreen() {
   } = useBudgetStore();
   // 한 달 시작일은 저장소에서 읽어 오므로, 다 읽은 뒤에(settingsLoaded) 이번 달 기간을 다시 계산한다
   const { monthStartDay, isLoaded: settingsLoaded } = useSettingsStore();
-  const { todaySchedules, loadToday } = useScheduleStore();
+  const { todaySchedules, loadToday, resyncNotificationsIfNeeded } = useScheduleStore();
   const { load: loadTodos } = useTodoStore();
 
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -657,27 +657,46 @@ export default function HomeScreen() {
     loadToday();
     loadTodos();
 
-    // 알림 권한 요청 — 앱 최초 실행 시 권한 팝업이 표시된다
-    requestNotificationPermission();
+    // 알림 권한 요청 — 앱 최초 실행 시 권한 팝업이 표시된다.
+    // 권한 요청이 Android 알림 채널도 만들므로, 끝난 뒤에 예전 버전 알림 정리(DB v5 첫 실행 한 번)를 한다(QA TC-042)
+    requestNotificationPermission()
+      .then(() => resyncNotificationsIfNeeded())
+      .catch(() => {
+        // 알림 정리에 실패해도 홈 화면은 그대로 쓸 수 있어야 한다 — 다음 수정·삭제부터는 정상 동작
+      });
 
-    // 백그라운드→포그라운드 복귀 시: 할 일은 항상 새로 읽고, 날짜가 바뀌었으면 오늘 일정·이번 달 합계도 갱신
+    /** 날짜가 바뀌었으면 오늘 기준 데이터를 모두 새로 읽는다 */
+    const refreshIfNewDay = () => {
+      const currentDate = todayString();
+      if (currentDate === lastActiveDateRef.current) return;
+      lastActiveDateRef.current = currentDate;
+      // 날짜가 바뀌면(특히 새 기간이 시작되면) 가계부 카드를 이번 달로 되돌린다
+      loadCurrentPeriod();
+      // 자정이 지나면 '오늘 내역'·오늘 일정·오늘 할 일도 새 날짜 기준으로 다시 읽는다
+      loadTodayTransactions();
+      loadToday();
+      loadTodos();
+    };
+
+    // 백그라운드→포그라운드 복귀 시: 할 일은 항상 새로 읽고(다른 화면에서 바꿨을 수 있음), 날짜가 바뀌었으면 나머지도 갱신
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        const currentDate = todayString();
         loadTodos();
-        if (currentDate !== lastActiveDateRef.current) {
-          // 날짜가 바뀌면(특히 새 기간이 시작되면) 가계부 카드를 이번 달로 되돌린다
-          loadCurrentPeriod();
-          // 자정이 지나면 '오늘 내역'도 새 날짜 기준으로 다시 읽는다
-          loadTodayTransactions();
-          loadToday();
-          lastActiveDateRef.current = currentDate;
-        }
+        refreshIfNewDay();
       }
     });
-    return () => sub.remove();
+
+    // 홈을 켜 둔 채 자정을 넘기는 경우(QA TC-017) — AppState가 바뀌지 않으므로 1분마다 날짜만 비교한다.
+    // 자정까지 남은 시간으로 긴 타이머 하나를 거는 방법도 있지만, 기기가 잠들었다 깨는 동안 타이머가 밀리거나
+    // 사용자가 시계를 바꾸면 어긋날 수 있다. 문자열 하나 비교라 1분 간격이어도 부담이 없고, 늦어도 1분 안에 바뀐다.
+    const midnightTimer = setInterval(refreshIfNewDay, 60_000);
+
+    return () => {
+      sub.remove();
+      clearInterval(midnightTimer);
+    };
     // Zustand store 액션은 안정적 참조 — 의존성에 포함해도 무한 루프 없음
-  }, [loadCurrentPeriod, loadToday, loadTodayTransactions, loadTodos]);
+  }, [loadCurrentPeriod, loadToday, loadTodayTransactions, loadTodos, resyncNotificationsIfNeeded]);
 
   // 처음 켤 때 이번 달 기간을 불러온다 — 설정(한 달 시작일)을 읽기 전에 계산하면 1일 기준이 되므로 기다린다
   useEffect(() => {

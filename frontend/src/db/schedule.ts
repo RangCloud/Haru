@@ -26,9 +26,11 @@ export interface ScheduleItem {
   created_at: string;  // ISO 8601
   /** 기기 캘린더에서 가져온 일정의 출처 표식. 직접 만든 일정은 "" (화면에서는 쓰지 않는다) */
   source_id?: string;
+  /** 예약된 10분 전 알림의 ID. 알림이 없으면 "" (DB v5부터). 수정·삭제할 때 기존 알림을 취소하는 데 쓴다 */
+  notification_id?: string;
 }
 
-export type NewScheduleItem = Omit<ScheduleItem, "id" | "created_at">;
+export type NewScheduleItem = Omit<ScheduleItem, "id" | "created_at" | "notification_id">;
 
 // 날짜 판정(lastDayOf·occursOn·sortForDate)은 DB와 무관한 순수 계산이라 utils/scheduleText.ts에 둔다
 
@@ -136,6 +138,30 @@ export async function deleteImportedSchedules(): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync("DELETE FROM schedules WHERE source_id != ''");
   return result.changes;
+}
+
+/** 일정 하나를 조회한다 (수정·삭제 전에 기존 알림 ID와 바뀌지 않는 필드를 알아야 할 때) */
+export async function getScheduleById(id: number): Promise<ScheduleItem | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<ScheduleItem>("SELECT * FROM schedules WHERE id = ?", [id]);
+}
+
+/** 예약한 알림 ID를 일정에 기록한다. 알림이 없으면 "" */
+export async function setScheduleNotificationId(id: number, notificationId: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync("UPDATE schedules SET notification_id = ? WHERE id = ?", [notificationId, id]);
+}
+
+/**
+ * 오늘 이후에 시작하는, 시간이 있는 직접 만든 일정 — 알림을 다시 예약할 후보.
+ * 지난 시각인지는 scheduleEventNotification이 판단하므로 여기서는 날짜로만 넉넉히 거른다.
+ */
+export async function getUpcomingTimedSchedules(today: string): Promise<ScheduleItem[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<ScheduleItem>(
+    "SELECT * FROM schedules WHERE date >= ? AND time != '' AND source_id = ''",
+    [today],
+  );
 }
 
 /** 일정을 삭제한다 */

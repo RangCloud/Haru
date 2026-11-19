@@ -6,8 +6,9 @@
  *
  * 사용 흐름:
  * 1. 앱 시작 시 requestNotificationPermission() 호출
- * 2. 일정 추가 시 scheduleEventNotification() 호출 → scheduleId 반환
- * 3. 일정 삭제 시 cancelNotification(scheduleId) 호출
+ * 2. 일정 추가 시 scheduleEventNotification() 호출 → 알림 ID 반환 → 일정에 저장(schedules.notification_id)
+ * 3. 일정 수정·삭제 시 저장해 둔 ID로 cancelNotification() 호출
+ * 2·3은 store/scheduleStore.ts가 일정 추가·수정·삭제와 함께 처리한다.
  */
 
 import * as Notifications from "expo-notifications";
@@ -105,5 +106,17 @@ export async function cancelNotification(scheduleId: string): Promise<void> {
     await Notifications.cancelScheduledNotificationAsync(scheduleId);
   } catch {
     // 이미 발생한 알림이거나 잘못된 id면 무시
+  }
+}
+
+/**
+ * 이 앱이 예약한 알림을 모두 취소한다.
+ * 알림 ID를 저장하지 않던 예전 버전(DB v4 이하)의 알림을 정리할 때 한 번만 쓴다(scheduleStore.resyncNotificationsIfNeeded).
+ */
+export async function cancelAllNotifications(): Promise<void> {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch {
+    // 권한이 없거나 예약된 알림이 없으면 할 일이 없다
   }
 }

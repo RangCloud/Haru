@@ -6,21 +6,34 @@
  * - todaySchedules: 홈 '오늘 일정' 전용. 달력에서 다른 달로 넘겨도 바뀌지 않도록
  *   monthSchedules와 분리해 오늘 날짜로 따로 조회한다.
  * - colorLabels: 색상별 사용자 이름 (예: 파랑 = 회사)
+ *
+ * 일정 10분 전 알림도 여기서 함께 관리한다. 추가·수정·삭제가 모두 이 store를 거치므로
+ * 어느 화면에서 바꿔도 "일정 = 알림"이 어긋나지 않는다(QA TC-042).
+ *   추가 → 예약하고 알림 ID 저장 / 수정 → 기존 알림 취소 후 새 내용으로 다시 예약 / 삭제 → 기존 알림 취소
  */
 
 import { create } from "zustand";
 import { getColorLabels, setColorLabel, type ColorLabels } from "@/src/db/colorLabel";
+import { takeNotificationResyncFlag } from "@/src/db/database";
 import {
   addSchedule,
   deleteSchedule,
+  getScheduleById,
   getSchedulesByMonth,
   getSchedulesOnDate,
+  getUpcomingTimedSchedules,
+  setScheduleNotificationId,
   updateSchedule,
   type NewScheduleItem,
   type ScheduleItem,
 } from "@/src/db/schedule";
 import { todayString, toDateStr } from "@/src/utils/date";
-import { occursOn, sortForDate } from "@/src/utils/scheduleText";
+import {
+  cancelAllNotifications,
+  cancelNotification,
+  scheduleEventNotification,
+} from "@/src/utils/notifications";
+import { needsEventNotification, occursOn, sortForDate } from "@/src/utils/scheduleText";
 
 // ── 상태 타입 ──────────────────────────────────────────────────
 
@@ -47,12 +60,29 @@ interface ScheduleState {
   remove: (id: number) => Promise<void>;
   /** DB가 스토어 밖에서 바뀐 뒤(기기 캘린더 가져오기 등) 화면 목록을 새로 읽는다 */
   reload: () => Promise<void>;
+  /**
+   * DB v5로 올라간 첫 실행에서 한 번만, 예전 버전이 남긴 알림을 정리하고 다시 예약한다.
+   * 알림 권한을 요청한 뒤(Android 알림 채널이 생긴 뒤) 부른다.
+   */
+  resyncNotificationsIfNeeded: () => Promise<void>;
 }
 
 // ── 헬퍼 ──────────────────────────────────────────────────────
 
 function filterByDate(schedules: ScheduleItem[], date: string): ScheduleItem[] {
   return sortForDate(schedules.filter((s) => occursOn(s, date)), date);
+}
+
+/**
+ * 일정 하나의 알림을 현재 내용에 맞게 예약하고 ID를 기록한다.
+ * 알림 대상이 아니거나, 이미 지난 시각이거나, 권한이 없으면 ID는 ""로 남는다.
+ * 알림은 여러 날 일정이라도 첫날(date) 시작 시각 10분 전 한 번만 보낸다.
+ */
+async function scheduleAndStore(id: number, s: Pick<ScheduleItem, "title" | "date" | "time" | "source_id">) {
+  const notificationId = needsEventNotification(s)
+    ? await scheduleEventNotification(s.title, s.date, s.time)
+    : null;
+  await setScheduleNotificationId(id, notificationId ?? "");
 }
 
 // ── Store ──────────────────────────────────────────────────────
@@ -134,20 +164,41 @@ export const useScheduleStore = create<ScheduleState>((set, get) => {
     },
 
     add: async (s) => {
-      await addSchedule(s);
+      const id = await addSchedule(s);
+      await scheduleAndStore(id, s);
       await refresh();
     },
 
     update: async (id, s) => {
+      // 제목(알림 문구)·날짜·시각 중 무엇이 바뀌었든 기존 알림을 지우고 새 내용으로 다시 건다.
+      // 무엇이 바뀌었는지 비교하는 것보다 단순하고, 바뀌지 않았어도 결과가 같다.
+      const before = await getScheduleById(id);
+      if (before?.notification_id) await cancelNotification(before.notification_id);
       await updateSchedule(id, s);
+      // s는 바뀐 필드만 담을 수 있으므로 기존 값과 합쳐 최종 내용을 만든다.
+      // 출처 표식(source_id)은 수정으로 바뀌지 않으므로(updateSchedule이 쓰지 않음) 항상 DB 값을 쓴다 —
+      // s에 source_id: undefined가 섞여 들어와도 가져온 일정에 알림이 걸리지 않게 한다.
+      if (before) await scheduleAndStore(id, { ...before, ...s, source_id: before.source_id });
       await refresh();
     },
 
     remove: async (id) => {
+      const before = await getScheduleById(id);
+      if (before?.notification_id) await cancelNotification(before.notification_id);
       await deleteSchedule(id);
       await refresh();
     },
 
     reload: refresh,
+
+    resyncNotificationsIfNeeded: async () => {
+      if (!(await takeNotificationResyncFlag())) return;
+      // 예전 버전의 알림은 어느 일정 것인지 알 수 없으므로 모두 취소한다.
+      // 하루가 예약하는 알림은 일정 알림뿐이라(notifications.ts) 다른 알림을 지울 걱정은 없다.
+      await cancelAllNotifications();
+      // 지운 일정·옛 시각의 알림은 사라지고, 남아 있는 앞으로의 일정만 현재 내용으로 다시 예약된다
+      const upcoming = await getUpcomingTimedSchedules(todayString());
+      for (const s of upcoming) await scheduleAndStore(s.id, s);
+    },
   };
 });
