@@ -14,6 +14,11 @@
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <!-- 세로 고정(MainActivity의 screenOrientation="portrait")을 하면 Android가 '세로 화면 기능 필수' 조건을 자동으로 붙여,
+       세로 화면 기능을 신고하지 않은 기기(일부 크롬북·데스크톱·XR 등)에는 Play에서 설치할 수 없게 된다.
+       Play Console이 1.0.1(27)부터 이를 '설치 가능 기기 제한' 경고로 알려 주므로 '있으면 쓰지만 필수는 아님'으로 바꾼다.
+       휴대폰의 세로 고정은 그대로다. (targetSdk 36이라 Android 16의 큰 화면에서는 이 설정과 관계없이 세로 고정이 무시된다) -->
+  <uses-feature android:name="android.hardware.screen.portrait" android:required="false"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
