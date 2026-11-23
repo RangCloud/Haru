@@ -7,6 +7,7 @@
  * 예전의 인사말·날씨 칩(이모지)은 날짜 제목과 '14°, 맑음' 글자 한 줄로 대신한다.
  */
 
+import Constants from "expo-constants";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -53,6 +54,9 @@ function formatToday(): string {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   return `${now.getMonth() + 1}월 ${now.getDate()}일 ${days[now.getDay()]}요일`;
 }
+
+/** 설정 > 앱 정보에 보여 줄 버전 (app.json의 expo.version). 읽지 못하는 환경에서도 빈칸이 되지 않게 대비값을 둔다 */
+const APP_VERSION = Constants.expoConfig?.version ?? "1.0.1";
 
 function todayString(): string {
   const d = new Date();
@@ -252,7 +256,8 @@ function SettingsModal({
       <View style={[settingStyles.listCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <View style={settingStyles.listRow}>
           <Text style={[settingStyles.listLabel, { color: colors.text }]}>버전</Text>
-          <Text style={[settingStyles.listValue, { color: colors.subtext }]}>1.0.0</Text>
+          {/* 버전은 app.json에서 읽는다 — 예전처럼 글자로 고정해 두면 버전을 올릴 때마다 함께 고쳐야 하고 빠뜨리기 쉽다 */}
+          <Text style={[settingStyles.listValue, { color: colors.subtext }]}>{APP_VERSION}</Text>
         </View>
       </View>
       {/* 개인정보처리방침 — 데이터 삭제 요청 방법도 이 페이지와 지원 페이지에 있다 */}
