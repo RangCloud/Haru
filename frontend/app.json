@@ -48,7 +48,19 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -72,7 +84,8 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "캘린더에 있는 일정을 하루로 가져오기 위해 캘린더 접근 권한이 필요합니다. 일정은 기기 안에서만 복사되며 서버로 전송되지 않습니다."
+          "calendarPermission": "캘린더에 있는 일정을 하루로 가져오기 위해 캘린더 접근 권한이 필요합니다. 일정은 기기 안에서만 복사되며 서버로 전송되지 않습니다.",
+          "remindersPermission": false
         }
       ],
       [
